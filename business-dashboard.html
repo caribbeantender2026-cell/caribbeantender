@@ -12,4 +12,25 @@
         <button class="btn logout-btn" onclick="logoutUser()">Logout</button>
     </div>
 </div><h2>Business Dashboard</h2><section class="dashboard"><div class="stat"><strong>2</strong>My Tenders</div><div class="stat"><strong>3</strong>Bids Received</div><div class="stat"><strong>2</strong>Open Tenders</div></section><div class="card"><h3>Business Actions</h3><div class="actions"><a class="btn" href="business-profile.html">Create / Update Company Profile</a><a class="btn gold" href="create-tender.html">Create Tender</a></div></div><div class="card"><h3>My Published Tenders</h3><table class="table"><thead><tr><th>Tender</th><th>Closing Date</th><th>Bids</th><th>Action</th></tr></thead><tbody id="myTenderRows"></tbody></table></div></main><footer class="footer"><div class="wrap">© <span class="year"></span> CaribbeanTender. MVP website. This version excludes payments, messaging and contract award management.</div></footer>
-<script src="assets/supabase-config.js"></script><script src="assets/app.js"></script></body></html>
+<script src="assets/supabase-config.js"></script><script src="assets/app.js"></script><script>document.addEventListener("DOMContentLoaded", function () {
+
+    const userName = localStorage.getItem("userName");
+    const userType = localStorage.getItem("userType");
+
+    if (!userType) {
+        window.location.href = "login.html";
+        return;
+    }
+
+    if (userType !== "business") {
+        window.location.href = "supplier-dashboard.html";
+        return;
+    }
+
+    const profileName = document.getElementById("profileName");
+
+    if (userName && profileName) {
+        profileName.textContent = userName;
+    }
+
+});</script></body></html>
