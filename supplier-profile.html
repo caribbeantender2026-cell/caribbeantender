@@ -1,0 +1,20 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Supplier Profile</title><link rel="stylesheet" href="assets/styles.css"></head><body><div class="topbar"><div class="wrap"><span>Caribbean Tender Procurement Marketplace</span><span>Assistance: support@example.com</span></div></div>
+<header class="brandbar"><div class="wrap"><div class="logo"><div class="seal">CT</div><div class="brand"><h1>CaribbeanTender</h1><p>Electronic Tendering for Private Sector Businesses and Suppliers</p></div></div><div><span class="account-badge supplier-badge">Supplier</span></div></div></header><nav class="nav"><div class="wrap"><ul><li><a href="index.html">Homepage</a></li><li><a href="tenders.html">Current Tenders</a></li><li><a href="supplier-dashboard.html">Supplier Dashboard</a></li><li><a href="supplier-profile.html">Supplier Profile</a></li></ul><span class="datebox">Supplier Account</span></div></nav><main class="wrap"><div class="profile-header"><div><p class="welcome-text">Signed in as</p><h2 class="currentProfileName">Supplier Name</h2><span class="account-badge supplier-badge">Supplier Account</span></div><div class="profile-actions"><a href="supplier-dashboard.html" class="btn">Dashboard</a><button class="btn logout-btn" type="button" onclick="logoutUser()">Logout</button></div></div><div class="card form"><h2>Supplier Profile</h2><form id="supplierProfileForm"><label>Company Name</label><input id="supplierCompanyName" required><label>Company Address</label><input id="supplierAddress" required><label>Industry Category</label><select id="supplierCategory" required><option value="">Select category</option><option>Goods and Supplies</option><option>Works</option><option>Professional Services</option><option>Technology Services</option><option>Security Services</option><option>Cleaning and Janitorial</option></select><label>Contact Number</label><input id="supplierPhone" required><label>Email Address</label><input id="supplierEmail" type="email" required><label>Company Description</label><textarea id="supplierDescription" required></textarea><div class="actions"><button class="btn" type="submit">Save Profile</button><a class="btn gold" href="supplier-dashboard.html">Back to Dashboard</a></div></form></div></main><footer class="footer"><div class="wrap">© <span class="year"></span> CaribbeanTender. MVP website. This version excludes payments, messaging and contract award management.</div></footer><script src="assets/supabase-config.js"></script><script src="assets/app.js"></script><script>
+function logoutUser(){
+  localStorage.removeItem('userType');
+  localStorage.removeItem('userName');
+  localStorage.removeItem('companyName');
+  window.location.href='login.html';
+}
+function requireRole(expectedRole){
+  const role=(localStorage.getItem('userType')||'').toLowerCase();
+  if(!role){ window.location.href='login.html'; return false; }
+  if(role!==expectedRole){
+    window.location.href=role==='business'?'business-dashboard.html':'supplier-dashboard.html';
+    return false;
+  }
+  const displayName=localStorage.getItem('companyName')||localStorage.getItem('userName')||(expectedRole==='business'?'Business Name':'Supplier Name');
+  document.querySelectorAll('.currentProfileName').forEach(el=>el.textContent=displayName);
+  return true;
+}
+</script><script>document.addEventListener('DOMContentLoaded',function(){if(!requireRole('supplier'))return;document.getElementById('supplierCompanyName').value=localStorage.getItem('companyName')||'';document.getElementById('supplierEmail').value=localStorage.getItem('userEmail')||'';});document.getElementById('supplierProfileForm').addEventListener('submit',function(e){e.preventDefault();const company=document.getElementById('supplierCompanyName').value.trim();localStorage.setItem('companyName',company);document.querySelectorAll('.currentProfileName').forEach(el=>el.textContent=company);alert('Supplier profile saved for this MVP demo.');});</script></body></html>
