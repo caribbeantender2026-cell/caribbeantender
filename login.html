@@ -1,0 +1,71 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Login | ProcureMarket</title><link rel="stylesheet" href="assets/styles.css"></head><body><div class="topbar"><div class="wrap"><span>Caribbean Tender Procurement Marketplace</span><span>Assistance: support@example.com</span></div></div>
+<header class="brandbar"><div class="wrap"><div class="logo"><div class="seal">CT</div><div class="brand"><h1>CaribbeanTender</h1><p>Electronic Tendering for Private Sector Businesses and Suppliers</p></div></div><div><a class="btn gold" href="register.html">Register</a></div></div></header><nav class="nav"><div class="wrap"><ul><li><a href="index.html">Homepage</a></li><li><a href="tenders.html">Current Tenders</a></li><li><a href="register.html">Register</a></li><li><a href="login.html">Login</a></li></ul><span class="datebox">MVP Demo</span></div></nav><main class="wrap"><div class="card form"><h2>Log in</h2><p class="small">Log in with the email address and password used when you registered.</p><form id="loginForm"><label>Email Address</label><input id="loginEmail" type="email" required><label>Password</label><input id="loginPassword" type="password" required><div id="loginMessage"></div><div class="actions"><button class="btn" type="submit">Log in</button><a class="btn gold" href="register.html">Register</a></div></form>
+<div id="accountChooser" class="notice hidden" style="margin-top:18px;">
+  <h3 style="margin-top:0;">Choose Account</h3>
+  <p>This email has both a Business account and a Supplier account. Choose which one you want to use.</p>
+  <div class="actions">
+    <button id="chooseBusiness" type="button" class="btn">Business Account</button>
+    <button id="chooseSupplier" type="button" class="btn gold">Supplier Account</button>
+  </div>
+</div>
+</div></main><footer class="footer"><div class="wrap">© <span class="year"></span> CaribbeanTender. MVP website. This version excludes payments, messaging and contract award management.</div></footer><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="assets/supabase-config.js"></script><script src="assets/auth.js"></script><script src="assets/app.js"></script><script>
+document.getElementById('loginForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const message=document.getElementById('loginMessage');
+  const chooser=document.getElementById('accountChooser');
+  const button=this.querySelector('button[type="submit"]');
+
+  message.innerHTML='';
+  chooser.classList.add('hidden');
+  button.disabled=true;
+  button.textContent='Signing in…';
+
+  try{
+    if(!window.supabaseClient) throw new Error('Supabase did not initialize. Check assets/supabase-config.js.');
+
+    const email=document.getElementById('loginEmail').value.trim();
+    const password=document.getElementById('loginPassword').value;
+
+    const {data,error}=await window.supabaseClient.auth.signInWithPassword({email,password});
+    if(error) throw error;
+
+    let memberships=await getAccountMemberships(data.user);
+
+    if(!memberships.hasBusiness && !memberships.hasSupplier){
+      const legacyRole=String(data.user.user_metadata?.account_type||'').toLowerCase();
+      if(['business','supplier'].includes(legacyRole)){
+        await createRoleAccount(legacyRole);
+        memberships=await getAccountMemberships(data.user);
+      }
+    }
+
+    if(!memberships.hasBusiness && !memberships.hasSupplier){
+      throw new Error('Login succeeded, but no Business or Supplier account is attached to this email.');
+    }
+
+    const next=new URLSearchParams(location.search).get('next');
+    if(next){
+      const wantsBusiness=next.startsWith('business-') || next.startsWith('create-tender') || next.startsWith('view-bids');
+      const wantsSupplier=next.startsWith('supplier-') || next.startsWith('submit-bid');
+      if(wantsBusiness && memberships.hasBusiness){ location.href=next; return; }
+      if(wantsSupplier && memberships.hasSupplier){ location.href=next; return; }
+    }
+
+    if(memberships.hasBusiness && !memberships.hasSupplier){ location.href='business-dashboard.html'; return; }
+    if(memberships.hasSupplier && !memberships.hasBusiness){ location.href='supplier-dashboard.html'; return; }
+
+    chooser.classList.remove('hidden');
+    this.classList.add('hidden');
+
+    document.getElementById('chooseBusiness').onclick=()=>location.href='business-dashboard.html';
+    document.getElementById('chooseSupplier').onclick=()=>location.href='supplier-dashboard.html';
+
+  }catch(error){
+    console.error('Login failed:',error);
+    message.innerHTML='<div class="notice error">'+escapeHtml(error.message||'Unable to log in.')+'</div>';
+  }finally{
+    button.disabled=false;
+    button.textContent='Log in';
+  }
+});
+</script></body></html>
