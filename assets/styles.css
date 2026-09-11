@@ -503,3 +503,17 @@ button:disabled {
   }
 }
 
+.match-success {
+    margin-top: 5px;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--success);
+}
+
+.match-error {
+    margin-top: 5px;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--danger);
+}
+
