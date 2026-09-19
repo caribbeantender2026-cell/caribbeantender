@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supplier Subscription | CaribbeanTender</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="wrap">
+      <span>Caribbean Tender Procurement Marketplace</span>
+      <span>Assistance: support@example.com</span>
+    </div>
+  </div>
+
+  <header class="brandbar">
+    <div class="wrap">
+      <div class="logo">
+        <div class="seal">CT</div>
+        <div class="brand">
+          <h1>CaribbeanTender</h1>
+          <p>Electronic Tendering for Private Sector Businesses and Suppliers</p>
+        </div>
+      </div>
+      <div>
+        <span class="account-badge supplier-badge">Supplier</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="nav">
+    <div class="wrap">
+      <ul>
+        <li><a href="index.html">Homepage</a></li>
+        <li><a href="tenders.html">Current Tenders</a></li>
+        <li><a href="supplier-dashboard.html">Supplier Dashboard</a></li>
+        <li><a href="supplier-profile.html">Supplier Profile</a></li>
+      </ul>
+      <span class="datebox">Supplier Subscription</span>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <div class="profile-header">
+      <div>
+        <p class="welcome-text">Signed in as</p>
+        <h2 class="currentProfileName">Supplier Name</h2>
+        <span class="account-badge supplier-badge">Supplier Account</span>
+      </div>
+
+      <div class="profile-actions">
+        <a href="supplier-dashboard.html" class="btn">Dashboard</a>
+        <button class="btn logout-btn" type="button" onclick="logoutUser()">Logout</button>
+      </div>
+    </div>
+
+    <div id="subscriptionMessage"></div>
+
+    <section class="card subscription-intro">
+      <h2>Supplier Subscription</h2>
+      <p>
+        CaribbeanTender Supplier accounts include a 14-day free trial.
+        After the trial ends, an active subscription is required to continue submitting bids.
+      </p>
+      <p>
+        Business accounts remain free. Subscription requirements apply only to Supplier accounts.
+      </p>
+    </section>
+
+    <section class="subscription-plans">
+      <div class="card subscription-plan">
+        <h3>Monthly Supplier Plan</h3>
+        <p class="plan-price">JMD $X <span>/ month</span></p>
+        <p>Designed for Suppliers who prefer a flexible monthly subscription.</p>
+        <ul>
+          <li>Browse current tenders</li>
+          <li>Submit bids while the subscription is active</li>
+          <li>Maintain your Supplier profile</li>
+          <li>View your submitted bid activity</li>
+        </ul>
+        <button class="btn" type="button" disabled>Payment Coming Soon</button>
+      </div>
+
+      <div class="card subscription-plan">
+        <h3>Annual Supplier Plan</h3>
+        <p class="plan-price">JMD $X <span>/ year</span></p>
+        <p>Designed for Suppliers who want continuous annual access.</p>
+        <ul>
+          <li>Browse current tenders</li>
+          <li>Submit bids while the subscription is active</li>
+          <li>Maintain your Supplier profile</li>
+          <li>View your submitted bid activity</li>
+        </ul>
+        <button class="btn gold" type="button" disabled>Payment Coming Soon</button>
+      </div>
+    </section>
+
+    <div class="notice">
+      Online subscription payments are not yet enabled. The payment buttons will be activated
+      when the CaribbeanTender payment provider is connected.
+    </div>
+
+    <div class="actions">
+      <a class="btn" href="supplier-dashboard.html">Back to Supplier Dashboard</a>
+      <a class="btn gold" href="tenders.html">Browse Tenders</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      © <span class="year"></span> CaribbeanTender. MVP website.
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/supabase-config.js"></script>
+  <script src="assets/auth.js"></script>
+  <script src="assets/app.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      await requireSupplier();
+
+      const params = new URLSearchParams(window.location.search);
+      const reason = params.get("reason");
+      const messageBox = document.getElementById("subscriptionMessage");
+
+      if (reason === "trial-expired" && messageBox) {
+        messageBox.innerHTML = `
+          <div class="notice error">
+            Your free Supplier trial has ended. An active subscription is required
+            before you can submit additional bids.
+          </div>
+        `;
+      }
+    });
+  </script>
+
+</body>
+</html>
