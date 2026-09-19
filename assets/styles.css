@@ -559,3 +559,33 @@ button:disabled {
     margin-top: 18px;
   }
 }
+
+.subscription-card {
+    margin-bottom: 20px;
+}
+
+.trial-active {
+    padding: 18px;
+    border-left: 5px solid #d4a017;
+    background: #fffaf0;
+}
+
+.trial-active h2 {
+    margin: 8px 0;
+}
+
+.subscription-active {
+    padding: 18px;
+    border-left: 5px solid var(--success);
+    background: #f0fff4;
+}
+
+.trial-expired {
+    padding: 18px;
+    border-left: 5px solid var(--danger);
+    background: #fff5f5;
+}
+
+.subscription-card .btn {
+    margin-top: 10px;
+}
