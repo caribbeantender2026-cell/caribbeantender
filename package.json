@@ -7,15 +7,35 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "dev": "vite",
+    "build": "pnpm typecheck && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json",
+    "test": "node --test \"tests/app/**/*.test.ts\"",
     "test:database": "node --test --test-concurrency=1 \"tests/database/**/*.test.ts\"",
     "test:database:before-after": "node tests/database/before-after.ts",
-    "test:staging": "node --env-file=.env.staging.local --test --test-concurrency=1 \"tests/staging/**/*.test.ts\""
+    "test:staging": "node --env-file=.env.staging.local --test --test-concurrency=1 \"tests/staging/**/*.test.ts\"",
+    "types:local": "node scripts/generate-database-types.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
-    "@supabase/supabase-js": "2.117.2",
+    "@tailwindcss/vite": "4.3.3",
     "@types/node": "22.20.5",
-    "typescript": "7.0.2"
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.2"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "5.9.1",
+    "@supabase/supabase-js": "2.117.2",
+    "@tanstack/react-query": "5.104.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-hook-form": "7.89.0",
+    "react-router": "8.4.0",
+    "zod": "4.6.5"
   }
 }

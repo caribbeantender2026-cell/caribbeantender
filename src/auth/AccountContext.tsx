@@ -1,0 +1,88 @@
+/** The signed-in person's session and their business and supplier accounts, shared across the app. */
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase.ts';
+import type { Tables } from '../lib/database.types.ts';
+
+export type AccountType = 'business' | 'supplier';
+
+type AccountState = {
+  session: Session | null;
+  isLoading: boolean;
+  businessProfile: Tables<'business_profiles'> | null;
+  supplierProfile: Tables<'supplier_profiles'> | null;
+  refreshAccounts: () => Promise<void>;
+  signOut: () => Promise<void>;
+};
+
+const AccountContext = createContext<AccountState | null>(null);
+
+/** Loads which business and supplier accounts a login has (either may be missing). */
+export async function loadAccounts(userId: string) {
+  const [businessResult, supplierResult] = await Promise.all([
+    supabase.from('business_profiles').select('*').eq('user_id', userId).maybeSingle(),
+    supabase.from('supplier_profiles').select('*').eq('user_id', userId).maybeSingle(),
+  ]);
+  if (businessResult.error) throw businessResult.error;
+  if (supplierResult.error) throw supplierResult.error;
+  return { businessProfile: businessResult.data, supplierProfile: supplierResult.data };
+}
+
+/** Creates the signed-in person's business or supplier account, as the "Create ... Account" buttons do. */
+export async function createAccount(accountType: AccountType, session: Session): Promise<void> {
+  const table = accountType === 'business' ? 'business_profiles' : 'supplier_profiles';
+  const { error } = await supabase.from(table).insert({ user_id: session.user.id, contact_email: session.user.email ?? null });
+  if (error) throw error;
+}
+
+/** Provides the session and accounts to every page, and keeps them in step with Supabase Auth. */
+export function AccountProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const [session, setSession] = useState<Session | null>(null);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setIsSessionLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_authEvent, nextSession) => {
+      setSession(nextSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const userId = session?.user.id ?? null;
+  const accountsQuery = useQuery({
+    queryKey: ['accounts', userId],
+    queryFn: () => loadAccounts(userId ?? ''),
+    enabled: userId !== null,
+  });
+
+  const value: AccountState = {
+    session,
+    isLoading: isSessionLoading || (userId !== null && accountsQuery.isPending),
+    businessProfile: accountsQuery.data?.businessProfile ?? null,
+    supplierProfile: accountsQuery.data?.supplierProfile ?? null,
+    refreshAccounts: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['accounts', userId] });
+    },
+    signOut: async () => {
+      await supabase.auth.signOut();
+      // Nothing cached for one person may be shown to whoever signs in next.
+      queryClient.clear();
+    },
+  };
+
+  return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;
+}
+
+/** The current session and accounts. Must be used inside AccountProvider. */
+export function useAccount(): AccountState {
+  const accountState = useContext(AccountContext);
+  if (!accountState) {
+    throw new Error('useAccount was called outside AccountProvider; wrap the app in <AccountProvider>.');
+  }
+  return accountState;
+}

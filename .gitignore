@@ -24,3 +24,5 @@ desktop.ini
 .idea/
 *.swp
 CLAUDE.md
+# Vite build output
+dist/

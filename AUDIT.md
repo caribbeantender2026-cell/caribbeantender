@@ -287,7 +287,7 @@ RLS is enabled on `storage.objects` and `storage.buckets`. Versioning is disable
 
 **The bypass is through the view (finding C1).** `supplier_names_public` is writable by any user and runs as `postgres`. An expired supplier can `DELETE` their own row through the view, then insert a new `supplier_profiles` row, and `set_supplier_trial` grants a new 14-day trial. That bypasses payment indefinitely. The cost to the supplier is that their past bids are deleted (`bids_supplier_id_fkey ... ON DELETE CASCADE`).
 
-**The browser check is only for display.** [assets/app.js:48-90](assets/app.js#L48-L90) checks access before showing the bid form. The real gate is the `supplier_insert_bid` policy.
+**The browser check is only for display.** [assets/app.js:48-90](legacy/assets/app.js#L48-L90) checks access before showing the bid form. The real gate is the `supplier_insert_bid` policy.
 
 ### Issue 2: a business reads bids and documents before the closing time (Confirmed)
 
@@ -307,7 +307,7 @@ create policy ct_bid_docs_business_read on storage.objects as PERMISSIVE for SEL
     WHERE ((b.document_path = objects.name) AND (t.business_id = ( SELECT auth.uid() AS uid)))))));
 ```
 
-The browser doesn't check either: `view-bids.html` loads `select('*')` on `bids` and signs a document URL for each bid ([assets/app.js:233-271](assets/app.js#L233-L271)).
+The browser doesn't check either: `view-bids.html` loads `select('*')` on `bids` and signs a document URL for each bid ([assets/app.js:233-271](legacy/assets/app.js#L233-L271)).
 
 ### Issue 3: a bid after the closing date, or from a supplier without access (Partially)
 
@@ -318,7 +318,7 @@ create policy supplier_insert_bid on public.bids as PERMISSIVE for INSERT to aut
   with check (((supplier_id = ( SELECT auth.uid() AS uid)) AND ( SELECT private.supplier_has_access(( SELECT auth.uid() AS uid)) AS supplier_has_access)));
 ```
 
-No trigger on `bids` fires on INSERT; `bids_updated` is BEFORE UPDATE only. So bids are accepted after `closing_date` and on tenders whose status is `closed` or `cancelled`. Hiding the Submit Bid button ([assets/app.js:208](assets/app.js#L208)) is the only barrier.
+No trigger on `bids` fires on INSERT; `bids_updated` is BEFORE UPDATE only. So bids are accepted after `closing_date` and on tenders whose status is `closed` or `cancelled`. Hiding the Submit Bid button ([assets/app.js:208](legacy/assets/app.js#L208)) is the only barrier.
 
 **Bids without an active trial or subscription are blocked (not an issue).** `private.supplier_has_access` returns true only for `subscription_status = 'trial' and trial_ends_at > now()`, or for `subscription_status = 'active' and (subscription_ends_at is null or subscription_ends_at > now())`. Issue 1 covers the trial-reset route around it.
 
@@ -346,7 +346,7 @@ No trigger on `bids` fires on INSERT; `bids_updated` is BEFORE UPDATE only. So b
 
 ### Issue 6: Excel proposals fail (Confirmed)
 
-The bucket allows only PDF and Word (section 1.6). The browser allows Excel ([assets/app.js:125](assets/app.js#L125): `['pdf','doc','docx','xls','xlsx']`) and uploads with the file's own type ([assets/app.js:23](assets/app.js#L23): `{contentType:file.type}`). Storage therefore rejects `.xls` and `.xlsx` files after the form has accepted them.
+The bucket allows only PDF and Word (section 1.6). The browser allows Excel ([assets/app.js:125](legacy/assets/app.js#L125): `['pdf','doc','docx','xls','xlsx']`) and uploads with the file's own type ([assets/app.js:23](legacy/assets/app.js#L23): `{contentType:file.type}`). Storage therefore rejects `.xls` and `.xlsx` files after the form has accepted them.
 
 ### Issue 7: `closing_date` is a date compared against the UTC date (Confirmed)
 
@@ -357,7 +357,7 @@ const today=new Date().toISOString().slice(0,10);          // assets/app.js:195,
 ...gte('closing_date',today)
 ```
 
-Jamaica is UTC−5 all year. From 7:00pm local time, `toISOString()` already returns tomorrow's date, so a tender closing "today" drops off [tenders.html](tenders.html) and loses its Submit Bid button about five hours early ([assets/app.js:195](assets/app.js#L195), [208](assets/app.js#L208), [357](assets/app.js#L357)). The database also runs in UTC, so the `CHECK (closing_date >= CURRENT_DATE)` constraint and `now()` use UTC. Because of issue 3, the tender disappears only in the browser: the database keeps accepting bids indefinitely.
+Jamaica is UTC−5 all year. From 7:00pm local time, `toISOString()` already returns tomorrow's date, so a tender closing "today" drops off [tenders.html](legacy/tenders.html) and loses its Submit Bid button about five hours early ([assets/app.js:195](legacy/assets/app.js#L195), [208](legacy/assets/app.js#L208), [357](legacy/assets/app.js#L357)). The database also runs in UTC, so the `CHECK (closing_date >= CURRENT_DATE)` constraint and `now()` use UTC. Because of issue 3, the tender disappears only in the browser: the database keeps accepting bids indefinitely.
 
 ---
 
@@ -398,7 +398,7 @@ The bid row stores only the path, and bucket versioning is off, so the business 
 
 - **M1. `CHECK (closing_date >= CURRENT_DATE)` re-runs on every update.** Once a tender's closing date has passed, *any* UPDATE to that row fails, so its status can never be set to `closed` or `cancelled`. A `pg_dump` restore that includes past tenders would fail on that row data. After 7pm Jamaica time, a business also can't create a tender that closes "today". The first two consequences follow from how CHECK constraints work and are not tested yet.
 - **M2. A business can change or delete a tender after bids arrive.** `business_update_own_tenders` allows changing `closing_date`, `description` and `document_path` at any time. `business_delete_own_tenders` deletes the tender and, through the cascade, every bid on it, with no record kept. `"business manages own tender files"` allows replacing the tender document.
-- **M3. Tender documents can be read without logging in.** `ct_tender_docs_read` grants SELECT on `tender-documents` to `anon`, and `tenders_public_read` (`using (true)`, also granted to `anon`) exposes every `document_path`. [SETUP.md](assets/SETUP.md) says tender files are "readable by signed-in users". Whether this should be public is a product decision.
+- **M3. Tender documents can be read without logging in.** `ct_tender_docs_read` grants SELECT on `tender-documents` to `anon`, and `tenders_public_read` (`using (true)`, also granted to `anon`) exposes every `document_path`. [SETUP.md](legacy/assets/SETUP.md) says tender files are "readable by signed-in users". Whether this should be public is a product decision.
 - **M4. Uploads have no quota or access check.** `ct_bid_docs_insert` requires only that a `supplier_profiles` row exists, not an active trial; any signed-in user can create one for themselves. `ct_tender_docs_insert` is the same for businesses. Anyone who registers can upload an unlimited number of 10 MB files.
 - **M5. `bids.document_path` is not tied to the bidder.** The INSERT policy doesn't check that the path is in the bidder's own folder or that the object exists. A bid can point at a file uploaded later (which makes H1 easier). It can also point at another supplier's path, which `"bid parties read bid files"` would then let the bidder read. Paths contain a random UUID, so this needs the path to have leaked.
 - **M6. RLS is the only barrier.** `anon` and `authenticated` hold INSERT, UPDATE, DELETE and TRUNCATE on every core table, and the default privileges grant ALL on any new public table (section 1.3). A table created later without RLS would be immediately readable and writable by anyone. TRUNCATE can't be reached through the REST API (pg_graphql is not installed), so this is hardening, not an open hole.
@@ -407,9 +407,9 @@ The bid row stores only the path, and bucket versioning is off, so the business 
 
 ### Cleanup (not security)
 
-- **Signup fails when the name is shorter than 2 characters.** `handle_new_caribbeantender_user` inserts `coalesce(new.raw_user_meta_data ->> 'full_name', '')`, but `profiles_full_name_check` requires 2–120 characters. The `auth.users` insert therefore fails for a one-letter name, a name of only spaces ([register.html](register.html) has `required` but no `minlength`, and trims the value), or a user created without metadata (for example, from the dashboard). This was reproduced on the scratch copy of the schema. Phase 1 item P2.
+- **Signup fails when the name is shorter than 2 characters.** `handle_new_caribbeantender_user` inserts `coalesce(new.raw_user_meta_data ->> 'full_name', '')`, but `profiles_full_name_check` requires 2–120 characters. The `auth.users` insert therefore fails for a one-letter name, a name of only spaces ([register.html](legacy/register.html) has `required` but no `minlength`, and trims the value), or a user created without metadata (for example, from the dashboard). This was reproduced on the scratch copy of the schema. Phase 1 item P2.
 - **`profiles.account_type` is never set.** The active signup trigger, `handle_new_caribbeantender_user`, doesn't fill it. As a result, the storage policies `"business uploads own tender files"` and `"supplier uploads own bid files"` (which check `p.account_type`) never match, and their `ct_*` twins do the real work. These are duplicate, overlapping policies.
-- **Running [profiles-auth-check.sql](profiles-auth-check.sql) would break signup.** It attaches `handle_new_user()` as a second `auth.users` trigger. That function inserts into `profiles` with no `on conflict`, so every signup would fail on a duplicate key. Do not run it.
+- **Running [profiles-auth-check.sql](legacy/profiles-auth-check.sql) would break signup.** It attaches `handle_new_user()` as a second `auth.users` trigger. That function inserts into `profiles` with no `on conflict`, so every signup would fail on a duplicate key. Do not run it.
 - **Duplicate unique indexes:** `bids_one_per_supplier_per_tender` duplicates `bids_tender_id_supplier_id_key`, and the `*_one_per_user` indexes duplicate the primary keys.
 - **Two address columns:** `address` and `company_address` both exist on `business_profiles` and `supplier_profiles`.
 
