@@ -34,10 +34,21 @@ Everything here comes from the live project, read without changing data:
 - **Advisors:** Supabase's security advisors, fetched with `supabase db advisors --linked`.
 - **Edge Function:** the source of `payment-webhook`, downloaded with `supabase functions download --use-api`.
 - **Data read:** no application rows were read or changed. The only rows read were storage bucket settings and role metadata.
-
-**One unintended change to production.** The first `supabase db query --linked` call made the CLI create a temporary login role, `cli_login_postgres`. It is a member of `postgres` and could log in until it expired at 02:56:38 UTC on 2026-10-05; a check at 02:56:24 showed it still valid. It came from the CLI itself: for any `--linked` command run without a database password, the CLI's root pre-run creates this role through the Management API ([root.go:118](https://github.com/supabase/cli/blob/v2.102.0/apps/cli-go/cmd/root.go#L118), [db_url.go:157-170](https://github.com/supabase/cli/blob/v2.102.0/apps/cli-go/internal/utils/flags/db_url.go#L157-L170)). Every later call set a dummy `SUPABASE_DB_PASSWORD`, which skips that step. The role still exists, but it can no longer log in. Removing it is a write, so I left it for you to decide.
+- **Production change:** one temporary login role was created by the CLI. See [Changes to production during the audit](#changes-to-production-during-the-audit).
 
 **The migration file is rebuilt, not dumped.** `supabase db pull` was not run. It needs Docker, and it also writes to the remote migration history table. Instead, [supabase/migrations/20261005025300_remote_schema.sql](supabase/migrations/20261005025300_remote_schema.sql) was generated from the catalog output and checked as a round trip: applied to an empty Postgres 17, its inventory matched the live one exactly for tables, columns, constraints, indexes, effective privileges, column grants, policies, function definitions, triggers, views, enums and bucket settings. The remote migration history does not list this file, so **never run `supabase db push` against the live project with it.**
+
+## Changes to production during the audit
+
+| When (UTC, 2026-10-05) | Change | Status |
+|---|---|---|
+| Between 02:51:35 and 02:51:39 | The Supabase CLI created the login role `cli_login_postgres` (can log in; member of `postgres`) through the Management API while starting the first `supabase db query --linked` call. | Its password expired at **02:56:38 UTC** (`rolvaliduntil`). The role is kept, on the owner's instruction (2026-10-05). |
+
+- **The creation time is a window.** Postgres doesn't record when a role was created. The window runs from when the command's two output files were created to when they were last written. The expiry time is the role's `rolvaliduntil`; a read at 02:56:24 UTC showed the role still valid.
+- **Cause:** for any `--linked` command run without a database password, the CLI's root pre-run creates this role through the Management API ([root.go:118](https://github.com/supabase/cli/blob/v2.102.0/apps/cli-go/cmd/root.go#L118), [db_url.go:157-170](https://github.com/supabase/cli/blob/v2.102.0/apps/cli-go/internal/utils/flags/db_url.go#L157-L170)). The command itself doesn't use the role.
+- **Prevented after that:** every later CLI call set a dummy `SUPABASE_DB_PASSWORD`, which skips the role step. None of those calls printed "Initialising login role".
+- **No application data was read or changed.** Every query was a SELECT over system catalogs (`pg_catalog`, `information_schema`, `pg_policies`, `pg_roles`), plus the two rows of `storage.buckets` (bucket settings only). No rows were read from `profiles`, `business_profiles`, `supplier_profiles`, `tenders`, `bids`, `subscription_plans`, `subscription_events`, `auth.users` or `storage.objects`. No INSERT, UPDATE, DELETE, DDL or GRANT statement was sent.
+- **The other calls to Supabase only read:** `supabase link` (configuration reads), `supabase functions download` and `supabase db advisors`.
 
 ---
 
@@ -358,6 +369,7 @@ Jamaica is UTC−5 all year. From 7:00pm local time, `toISOString()` already ret
 Evidence is in sections 1.5 and 2 (issue 5); Supabase's advisor also rates both views ERROR. Example request, needing only the publishable key:
 `DELETE /rest/v1/business_names_public?user_id=not.is.null` would delete every business profile, every tender and every bid.
 *Fix direction:* drop both views. Replace them with a `security_invoker` view over a column-limited policy, or with a SECURITY DEFINER function that returns names only. Revoke INSERT, UPDATE and DELETE on anything that only needs reading.
+*Prepared fix, not applied:* [supabase/migrations/20261005031017_revoke_writes_on_public_name_views.sql](supabase/migrations/20261005031017_revoke_writes_on_public_name_views.sql) revokes INSERT, UPDATE and DELETE on both views from `anon` and `authenticated` and keeps SELECT. It closes the write hole; the views can still read every row. Verify it with [audit/verify-name-view-fix.sql](audit/verify-name-view-fix.sql) and [audit/verify-name-view-fix.mjs](audit/verify-name-view-fix.mjs). On a scratch copy of the schema, the checks showed writes allowed before the fix, refused for both roles after it, and allowed again after the rollback SQL, which restored the original permission entries exactly.
 
 ### High
 
@@ -386,6 +398,7 @@ The bid row stores only the path, and bucket versioning is off, so the business 
 
 ### Cleanup (not security)
 
+- **Signup fails when the name is shorter than 2 characters.** `handle_new_caribbeantender_user` inserts `coalesce(new.raw_user_meta_data ->> 'full_name', '')`, but `profiles_full_name_check` requires 2–120 characters. The `auth.users` insert therefore fails for a one-letter name, a name of only spaces ([register.html](register.html) has `required` but no `minlength`, and trims the value), or a user created without metadata (for example, from the dashboard). This was reproduced on the scratch copy of the schema.
 - **`profiles.account_type` is never set.** The active signup trigger, `handle_new_caribbeantender_user`, doesn't fill it. As a result, the storage policies `"business uploads own tender files"` and `"supplier uploads own bid files"` (which check `p.account_type`) never match, and their `ct_*` twins do the real work. These are duplicate, overlapping policies.
 - **Running [profiles-auth-check.sql](profiles-auth-check.sql) would break signup.** It attaches `handle_new_user()` as a second `auth.users` trigger. That function inserts into `profiles` with no `on conflict`, so every signup would fail on a duplicate key. Do not run it.
 - **Duplicate unique indexes:** `bids_one_per_supplier_per_tender` duplicates `bids_tender_id_supplier_id_key`, and the `*_one_per_user` indexes duplicate the primary keys.
@@ -397,18 +410,39 @@ The bid row stores only the path, and bucket versioning is off, so the business 
 
 ### Where to run it
 
-**Staging only, never the live project.** The live project has real data (about 3 business profiles and 1 supplier profile), and tests 1d and 5f delete data if C1 is real. The script refuses to run against `ijlcjthgwppllhlqocep`.
+**Staging only, never the live project** (approved 2026-10-05 on that condition). The live project has real data (about 3 business profiles and 1 supplier profile), and tests 1d and 5f delete data if C1 is real. The script refuses to run against `ijlcjthgwppllhlqocep`.
 
-1. Create a new Supabase project for staging. In its SQL Editor, run [supabase/migrations/20261005025300_remote_schema.sql](supabase/migrations/20261005025300_remote_schema.sql).
-2. In Authentication → Providers → Email, turn **Confirm email** off so the test sign-ups can log in straight away.
+**Why staging must be a hosted Supabase project, not plain Postgres.** The tests depend on four things Supabase provides outside the schema. Plain Postgres has none of them. The scratch copy used for this audit (PGlite) fakes `auth.uid()` as always null, so it only proves the schema and grants, not behaviour.
+
+| What the tests need | How a hosted staging project provides it | Plain Postgres |
+|---|---|---|
+| `anon` and `authenticated` roles | Supabase Auth issues a JWT on sign-in; the REST API (PostgREST) switches the database session to the JWT's `role` claim on every request. A request without a login runs as `anon`. | Roles can be created, but nothing switches between them per request |
+| `auth.uid()` | Supabase's own `auth.uid()` reads `sub` from the request's JWT claims, which PostgREST sets per request | Must be faked. `set local role authenticated` plus `set local request.jwt.claims` reproduces table policies, but not the REST layer |
+| Storage schema and policies | Supabase creates `storage.buckets`, `storage.objects`, `storage.foldername()` and `owner_id`. The Storage API enforces bucket size and MIME limits, sets `owner_id`, signs URLs, and runs object queries as the caller, so the `storage.objects` policies apply exactly as in production. | None of the Storage API exists: no uploads, signed URLs, MIME or size checks (tests 2b, 4b, 4c, H1 and issue 6) |
+| The REST paths the attacks use (`PATCH`, `DELETE` and `POST` on the views, the upsert in 1b) | The same PostgREST as production | Absent |
+
+The migration only adds this project's own objects (the `public` and `private` schemas, policies on `storage.objects`, bucket settings). Supabase supplies everything above. Running the Supabase stack locally (`supabase start`) would also be faithful, but it needs Docker.
+
+**Differences between staging and production to control:**
+
+- **Versions:** production runs Postgres 17.6.1.155, Auth (GoTrue) v2.197.0, PostgREST v14.5 and Storage v1.77.5 (from `supabase link`). A new project may get newer versions. Record staging's versions next to the results.
+- **Email confirmation:** turned off in staging so the scripted sign-ups can log in. This doesn't affect RLS.
+- **Test 3c needs a tender whose closing date has passed,** and the CHECK constraint blocks creating one. Option A (fully faithful): create a tender closing today in setup and run 3c after midnight UTC. Option B (faster): drop the constraint in staging only, which makes staging differ from production for that one test.
+- **Sign-ups must carry a `full_name` of at least 2 characters** (see Cleanup). The setup script does this. Creating users from the dashboard fails.
+
+**Steps:**
+
+1. Create a new Supabase project for staging. In its SQL Editor, run [supabase/migrations/20261005025300_remote_schema.sql](supabase/migrations/20261005025300_remote_schema.sql). Do **not** apply the name-view fix yet.
+2. In Authentication → Providers → Email, turn **Confirm email** off.
 3. Create the five test accounts (setup script below).
-4. In the staging SQL Editor, expire one supplier's trial and create a tender whose closing date has passed. The CHECK constraint has to be dropped to insert a past date. **Do this in staging only.**
+4. In the staging SQL Editor, expire one supplier's trial. For test 3c, pick option A or B. **Staging only.**
 
    ```sql
    update public.supplier_profiles
    set trial_ends_at = now() - interval '1 day'
    where user_id = (select id from auth.users where email = 'ct-test-supplier-expired@example.com');
 
+   -- Option B for test 3c only:
    alter table public.tenders drop constraint tenders_closing_date_check;
    insert into public.tenders (business_id, title, description, closing_date)
    select id, 'Audit past tender', 'Closing date already passed', current_date - 1
@@ -417,6 +451,19 @@ The bid row stores only the path, and bucket versioning is off, so the business 
    ```
 
 5. Install the client with `npm install @supabase/supabase-js` in a scratch folder. Set `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `TEST_ACCOUNT_PASSWORD` and `PAST_TENDER_ID`, then run the main script with `node security-tests.mjs`.
+6. Apply [the name-view fix](supabase/migrations/20261005031017_revoke_writes_on_public_name_views.sql) in staging. Tests 1d and 5f changed data, so reset it in the staging SQL Editor: 1d gave Supplier Expired a fresh trial, and 5f deleted Business Beta's business profile.
+
+   ```sql
+   update public.supplier_profiles
+   set trial_ends_at = now() - interval '1 day'
+   where user_id = (select id from auth.users where email = 'ct-test-supplier-expired@example.com');
+
+   insert into public.business_profiles (user_id, contact_email)
+   select id, email from auth.users where email = 'ct-test-business-beta@example.com'
+   on conflict (user_id) do nothing;
+   ```
+
+   Run the main script again: 1d, 5e and 5f should now say "not reproduced", and every other line should match the first run. Then run [audit/verify-name-view-fix.sql](audit/verify-name-view-fix.sql) and [audit/verify-name-view-fix.mjs](audit/verify-name-view-fix.mjs) against staging.
 
 ### Test accounts
 
@@ -733,3 +780,4 @@ Afterwards, delete the staging project, or delete the five test users in Authent
 - **Auth settings:** apart from leaked-password protection, none were checked (email confirmation, sign-up limits, redirect URLs, session lifetime).
 - **Data:** no table data or stored files were read, so I can't say whether any existing data has already been affected by C1.
 - **What the migration file leaves out:** comments, sequences, default privileges and Auth configuration.
+- **Name-view fix:** tested only on the scratch copy of the schema, not yet on hosted Supabase. On the live project, `postgres` is a member of `anon` and `authenticated` (`pg_has_role`), so check 2 of [audit/verify-name-view-fix.sql](audit/verify-name-view-fix.sql) can switch roles in the SQL Editor.
