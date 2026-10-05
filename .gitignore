@@ -5,6 +5,9 @@
 *.pem
 *.key
 
+# Audit query output (function bodies and cron commands can contain secrets)
+audit/inventory-results.json
+
 # Supabase CLI local state
 supabase/.temp/
 supabase/.branches/
