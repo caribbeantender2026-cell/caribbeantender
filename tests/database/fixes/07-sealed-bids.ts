@@ -34,12 +34,32 @@ export const sealedBidsSuite: FixSuite = {
       },
     },
     {
-      name: 'A business reads bids once the deadline has passed',
-      alreadyHeldBefore: true,
+      name: 'After the deadline, bids stay sealed until the tender is formally closed, which the business can do itself',
       run: async (database) => {
         const businessId = await createUser(database, { accountType: 'business' });
         const supplierId = await createUser(database, { accountType: 'supplier' });
         const tenderId = await createTender(database, businessId, 'past-deadline');
+        await createBid(database, tenderId, supplierId);
+        // Reading here would leave no "bids opened" record: the opening is logged only on closing.
+        assertNothingReachable(
+          await runAs(database, user(businessId), `select id from public.bids where tender_id = $1`, [tenderId]),
+          'business reads bids after the deadline but before the opening',
+        );
+        assertSucceeded(
+          await runAs(database, user(businessId), `update public.tenders set status = 'closed' where id = $1`, [tenderId]),
+          'business closes its own tender after the deadline',
+        );
+        const rows = assertSucceeded(await runAs(database, user(businessId), `select id from public.bids where tender_id = $1`, [tenderId]), 'read after closing');
+        assert.equal(rows.length, 1);
+      },
+    },
+    {
+      name: 'A business reads bids once the tender has been formally closed',
+      alreadyHeldBefore: true,
+      run: async (database) => {
+        const businessId = await createUser(database, { accountType: 'business' });
+        const supplierId = await createUser(database, { accountType: 'supplier' });
+        const tenderId = await createTender(database, businessId, 'opened');
         await createBid(database, tenderId, supplierId, 4321);
         const rows = assertSucceeded(
           await runAs<{ amount: string }>(database, user(businessId), `select amount from public.bids where tender_id = $1`, [tenderId]),

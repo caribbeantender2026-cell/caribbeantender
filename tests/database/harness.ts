@@ -194,14 +194,17 @@ export async function createUser(
   return userId;
 }
 
-export type TenderPhase = 'draft' | 'accepting-bids' | 'past-deadline';
+// 'past-deadline': still open, deadline passed, not yet formally closed (bids still sealed).
+// 'opened': formally closed after its deadline, so its bids are open to the business.
+export type TenderPhase = 'draft' | 'accepting-bids' | 'past-deadline' | 'opened';
 
 // Creates a tender in the requested phase, using whichever deadline column the schema has
 // (closing_date before the closes_at migration, closes_at after it).
 export async function createTender(database: PGlite, businessId: string, phase: TenderPhase): Promise<string> {
   const tenderId = randomUUID();
   if (await columnExists(database, 'tenders', 'closes_at')) {
-    const closesAt = phase === 'past-deadline' ? `now() - interval '1 hour'` : `now() + interval '7 days'`;
+    const deadlinePassed = phase === 'past-deadline' || phase === 'opened';
+    const closesAt = deadlinePassed ? `now() - interval '1 hour'` : `now() + interval '7 days'`;
     const status = phase === 'draft' ? 'draft' : 'open';
     await writeFixture(
       database,
@@ -209,13 +212,16 @@ export async function createTender(database: PGlite, businessId: string, phase: 
        values ($1, $2, 'Test tender', 'Test description', ${closesAt}, '${status}')`,
       [tenderId, businessId],
     );
+    if (phase === 'opened' && (await columnExists(database, 'tenders', 'closed_at'))) {
+      await writeFixture(database, `update public.tenders set status = 'closed', closed_at = closes_at where id = $1`, [tenderId]);
+    }
   } else {
     // The old closing_date CHECK forbids past dates, so before closes_at exists a "past deadline"
     // tender can only be one that closes today.
     await writeFixture(
       database,
       `insert into public.tenders (id, business_id, title, description, closing_date, status)
-       values ($1, $2, 'Test tender', 'Test description', current_date + ${phase === 'past-deadline' ? 0 : 7}, 'open')`,
+       values ($1, $2, 'Test tender', 'Test description', current_date + ${phase === 'past-deadline' || phase === 'opened' ? 0 : 7}, 'open')`,
       [tenderId, businessId],
     );
   }

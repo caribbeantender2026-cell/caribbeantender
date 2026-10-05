@@ -89,8 +89,8 @@ test('An open tender whose deadline has passed is closed by the migration', asyn
 });
 
 test('Existing tenders count as published, and cancelled ones keep a cancellation time', async () => {
-  const result = await database.query<{ id: string; published_at: Date | null; cancelled_at: Date | null }>(
-    `select id, published_at, cancelled_at from public.tenders where business_id = $1`,
+  const result = await database.query<{ id: string; published_at: Date | null; cancelled_at: Date | null; closed_at: Date | null }>(
+    `select id, published_at, cancelled_at, closed_at from public.tenders where business_id = $1`,
     [businessId],
   );
   for (const row of result.rows) {
@@ -98,6 +98,8 @@ test('Existing tenders count as published, and cancelled ones keep a cancellatio
   }
   // The cancellation time is the last update before the migration, not the migration itself.
   assert.equal(result.rows.find((row) => row.id === cancelledTenderId)?.cancelled_at?.toISOString(), '2026-09-10T12:00:00.000Z');
+  // Cancelled before its deadline, so its bids were never opened and stay sealed.
+  assert.equal(result.rows.find((row) => row.id === cancelledTenderId)?.closed_at, null);
 });
 
 test('A running trial is carried over unchanged', async () => {

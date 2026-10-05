@@ -13,12 +13,19 @@ alter table public.tenders
 
 -- Existing tenders were all published when created. A cancelled tender's last update is the best
 -- record of when it was cancelled; updated_at is left untouched so that stays true.
+-- closed_at marks a tender whose bids have been opened (see the sealed bids migration). Under the
+-- old rules a business could already read bids once the date had passed, so every tender that
+-- reached its deadline before being cancelled counts as opened.
 alter table public.tenders disable trigger tenders_updated;
 update public.tenders
 set
   published_at = created_at,
   cancelled_at = case when status = 'cancelled' then updated_at end,
-  closed_at = case when status = 'closed' or (status = 'open' and closes_at <= now()) then closes_at end,
+  closed_at = case
+    when status = 'closed' then closes_at
+    when status = 'open' and closes_at <= now() then closes_at
+    when status = 'cancelled' and updated_at >= closes_at then closes_at
+  end,
   status = case when status = 'open' and closes_at <= now() then 'closed' else status end;
 alter table public.tenders enable trigger tenders_updated;
 

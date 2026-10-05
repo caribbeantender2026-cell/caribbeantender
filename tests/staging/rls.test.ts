@@ -24,6 +24,7 @@ let supplierOne: TestAccount;
 let supplierTwo: TestAccount;
 let supplierExpired: TestAccount;
 let tender: { id: string; closesAt: Date };
+let cronTender: { id: string; closesAt: Date };
 let supplierOneBid: { bidId: string; documentPath: string };
 
 describe('Staging RLS suite', () => {
@@ -36,6 +37,8 @@ describe('Staging RLS suite', () => {
     await expireTrial(supplierExpired);
 
     tender = await publishTender(businessAlpha, sealedSeconds);
+    // Nobody closes this one by hand, so only pg_cron can close it.
+    cronTender = await publishTender(businessBeta, 20, 'Closed by pg_cron');
     const bid = await submitBid(supplierOne, tender.id, 1500);
     assert.equal(bid.error, null, 'Supplier One bids');
     assert.ok(bid.bidId);
@@ -211,7 +214,17 @@ describe('Staging RLS suite', () => {
     assert.match(late.error ?? '', /closed at|not open/);
   });
 
-  test('2d: after the deadline the business reads the bids and their names', async () => {
+  test('2d: after the deadline bids stay sealed until the tender is closed; the business closes it, the opening is logged, then it reads', async () => {
+    const { data: current } = await adminClient.from('tenders').select('status').eq('id', tender.id).single();
+    if (current?.status === 'open') {
+      // pg_cron may already have closed it; when it has not, nothing is readable yet.
+      const sealed = await businessAlpha.client.from('bids').select('id').eq('tender_id', tender.id);
+      assert.deepEqual(sealed.data ?? [], [], 'still sealed before the opening');
+      const closed = await businessAlpha.client.from('tenders').update({ status: 'closed' }).eq('id', tender.id);
+      assert.equal(closed.error, null, 'business closes its own tender after the deadline');
+    }
+    const { data: opening } = await adminClient.from('audit_log').select('details').eq('event_type', 'bids_opened').eq('tender_id', tender.id).single();
+    assert.equal((opening?.details as { bid_count?: number } | undefined)?.bid_count, 2, 'opening logged with both bids');
     const { data, error } = await businessAlpha.client.from('bids').select('supplier_id, amount').eq('tender_id', tender.id).order('amount');
     assert.equal(error, null);
     assert.deepEqual((data ?? []).map((row) => Number(row.amount)), [1500, 1700]);
@@ -232,17 +245,18 @@ describe('Staging RLS suite', () => {
     assert.equal(await downloaded.text(), `proposal from ${supplierOne.email}`);
   });
 
-  test('Lifecycle: pg_cron closes the tender within about a minute and logs the opening', async () => {
+  test('Lifecycle: pg_cron closes a tender within about a minute of its deadline and logs the opening', async () => {
+    await waitUntilPast(cronTender.closesAt);
     let status = 'open';
     for (let attempt = 0; attempt < 20 && status !== 'closed'; attempt += 1) {
-      const { data } = await adminClient.from('tenders').select('status').eq('id', tender.id).single();
+      const { data } = await adminClient.from('tenders').select('status').eq('id', cronTender.id).single();
       status = (data?.status as string | undefined) ?? 'unknown';
       if (status !== 'closed') {
         await sleep(6000);
       }
     }
     assert.equal(status, 'closed');
-    const { data: opening } = await adminClient.from('audit_log').select('details').eq('event_type', 'bids_opened').eq('tender_id', tender.id).single();
-    assert.equal((opening?.details as { bid_count?: number } | undefined)?.bid_count, 2);
+    const { data: opening } = await adminClient.from('audit_log').select('details').eq('event_type', 'bids_opened').eq('tender_id', cronTender.id).single();
+    assert.equal((opening?.details as { bid_count?: number } | undefined)?.bid_count, 0);
   });
 });

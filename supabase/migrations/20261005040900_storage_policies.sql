@@ -85,13 +85,21 @@ with check (
 );
 
 -- The tenders subquery runs under the tenders policies: published tenders, plus your own drafts.
+-- The file must also sit in that tender's business's own folder. A business can type any path into
+-- its own tender's document_path, so without this it could point a tender at another business's
+-- unpublished file and read it, or publish it to everyone.
 create policy tender_documents_read on storage.objects
 for select to authenticated
 using (
   bucket_id = 'tender-documents'
   and (
     (storage.foldername(name))[1] = (select auth.uid())::text
-    or exists (select 1 from public.tenders tender where tender.document_path = objects.name)
+    or exists (
+      select 1
+      from public.tenders tender
+      where tender.document_path = objects.name
+        and (storage.foldername(objects.name))[1] = tender.business_id::text
+    )
   )
 );
 

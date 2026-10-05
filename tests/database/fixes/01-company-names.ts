@@ -48,7 +48,7 @@ export const companyNamesSuite: FixSuite = {
       run: async (database) => {
         const businessId = await createUser(database, { accountType: 'business' });
         const supplierId = await createUser(database, { accountType: 'supplier', companyName: 'Bidder Limited' });
-        const tenderId = await createTender(database, businessId, 'past-deadline');
+        const tenderId = await createTender(database, businessId, 'opened');
         await createBid(database, tenderId, supplierId);
         const rows = assertSucceeded(
           await runAs<{ company_name: string }>(database, user(businessId), `select company_name from public.supplier_names_public where user_id = $1`, [supplierId]),

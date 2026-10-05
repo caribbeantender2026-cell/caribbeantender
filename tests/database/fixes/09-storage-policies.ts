@@ -63,7 +63,7 @@ export const storagePoliciesSuite: FixSuite = {
       run: async (database) => {
         const businessId = await createUser(database, { accountType: 'business' });
         const supplierId = await createUser(database, { accountType: 'supplier' });
-        const tenderId = await createTender(database, businessId, 'past-deadline');
+        const tenderId = await createTender(database, businessId, 'opened');
         const { bidId, documentPath } = await createBid(database, tenderId, supplierId);
         assertNothingReachable(await readObjectAs(database, businessId, 'bid-documents', documentPath), 'read without a recorded download');
 
@@ -139,6 +139,26 @@ export const storagePoliciesSuite: FixSuite = {
         const otherBusinessId = await createUser(database, { accountType: 'business' });
         const documentPath = await createStoredFile(database, 'tender-documents', businessId, 'draft-specification.pdf');
         assertNothingReachable(await readObjectAs(database, otherBusinessId, 'tender-documents', documentPath), "another business reads a draft's document");
+      },
+    },
+    {
+      name: "A business cannot read another business's file by pointing its own tender at it",
+      run: async (database) => {
+        const victimBusinessId = await createUser(database, { accountType: 'business' });
+        const attackerBusinessId = await createUser(database, { accountType: 'business' });
+        const unpublishedPath = await createStoredFile(database, 'tender-documents', victimBusinessId, 'confidential-specification.pdf');
+        const draftRows = assertSucceeded(
+          await runAs<{ id: string }>(
+            database,
+            user(attackerBusinessId),
+            `insert into public.tenders (business_id, title, description, closes_at, document_path, document_name)
+             values ($1, 'Decoy', 'x', now() + interval '3 days', $2, 'decoy.pdf') returning id`,
+            [attackerBusinessId, unpublishedPath],
+          ),
+          'attacker creates a draft pointing at the victim file',
+        );
+        assert.equal(draftRows.length, 1);
+        assertNothingReachable(await readObjectAs(database, attackerBusinessId, 'tender-documents', unpublishedPath), "attacker reads the victim's file");
       },
     },
     {
