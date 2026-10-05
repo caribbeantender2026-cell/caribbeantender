@@ -370,6 +370,15 @@ Evidence is in sections 1.5 and 2 (issue 5); Supabase's advisor also rates both 
 `DELETE /rest/v1/business_names_public?user_id=not.is.null` would delete every business profile, every tender and every bid.
 *Fix direction:* drop both views. Replace them with a `security_invoker` view over a column-limited policy, or with a SECURITY DEFINER function that returns names only. Revoke INSERT, UPDATE and DELETE on anything that only needs reading.
 *Prepared fix, not applied:* [supabase/migrations/20261005031017_revoke_writes_on_public_name_views.sql](supabase/migrations/20261005031017_revoke_writes_on_public_name_views.sql) revokes INSERT, UPDATE and DELETE on both views from `anon` and `authenticated` and keeps SELECT. It closes the write hole; the views can still read every row. Verify it with [audit/verify-name-view-fix.sql](audit/verify-name-view-fix.sql) and [audit/verify-name-view-fix.mjs](audit/verify-name-view-fix.mjs). On a scratch copy of the schema, the checks showed writes allowed before the fix, refused for both roles after it, and allowed again after the rollback SQL, which restored the original permission entries exactly.
+*Still flagged after the fix:* the Security Advisor will keep reporting both views as `security_definer_view` (ERROR). They still bypass RLS because they aren't `security_invoker` views; the revoke removes only the writes. The permanent fix is Phase 1 item P1 (section 6).
+*Rollout (approved in principle; waiting for the lead developer's go-ahead):*
+
+1. Read-only: record the exact row count of every public table with [audit/row-counts.sql](audit/row-counts.sql) into `audit/row-counts-before.txt`.
+2. The owner applies the migration in the SQL Editor.
+3. Run check 1 (read-only).
+4. Only if check 1 shows select = true and insert, update and delete = false in all four rows, run check 3 through the REST API.
+5. Check 2 is not run on production.
+6. Read-only: record row counts again into `audit/row-counts-after.txt` and diff them against the before file.
 
 ### High
 
@@ -398,7 +407,7 @@ The bid row stores only the path, and bucket versioning is off, so the business 
 
 ### Cleanup (not security)
 
-- **Signup fails when the name is shorter than 2 characters.** `handle_new_caribbeantender_user` inserts `coalesce(new.raw_user_meta_data ->> 'full_name', '')`, but `profiles_full_name_check` requires 2–120 characters. The `auth.users` insert therefore fails for a one-letter name, a name of only spaces ([register.html](register.html) has `required` but no `minlength`, and trims the value), or a user created without metadata (for example, from the dashboard). This was reproduced on the scratch copy of the schema.
+- **Signup fails when the name is shorter than 2 characters.** `handle_new_caribbeantender_user` inserts `coalesce(new.raw_user_meta_data ->> 'full_name', '')`, but `profiles_full_name_check` requires 2–120 characters. The `auth.users` insert therefore fails for a one-letter name, a name of only spaces ([register.html](register.html) has `required` but no `minlength`, and trims the value), or a user created without metadata (for example, from the dashboard). This was reproduced on the scratch copy of the schema. Phase 1 item P2.
 - **`profiles.account_type` is never set.** The active signup trigger, `handle_new_caribbeantender_user`, doesn't fill it. As a result, the storage policies `"business uploads own tender files"` and `"supplier uploads own bid files"` (which check `p.account_type`) never match, and their `ct_*` twins do the real work. These are duplicate, overlapping policies.
 - **Running [profiles-auth-check.sql](profiles-auth-check.sql) would break signup.** It attaches `handle_new_user()` as a second `auth.users` trigger. That function inserts into `profiles` with no `on conflict`, so every signup would fail on a duplicate key. Do not run it.
 - **Duplicate unique indexes:** `bids_one_per_supplier_per_tender` duplicates `bids_tender_id_supplier_id_key`, and the `*_one_per_user` indexes duplicate the primary keys.
@@ -410,7 +419,7 @@ The bid row stores only the path, and bucket versioning is off, so the business 
 
 ### Where to run it
 
-**Staging only, never the live project** (approved 2026-10-05 on that condition). The live project has real data (about 3 business profiles and 1 supplier profile), and tests 1d and 5f delete data if C1 is real. The script refuses to run against `ijlcjthgwppllhlqocep`.
+**Staging only, never the live project** (approved 2026-10-05 on that condition). **Paused until the contract is signed.** The owner will then create the staging project in their own Supabase account and link it. The live project has real data (about 3 business profiles and 1 supplier profile), and tests 1d and 5f delete data if C1 is real. The script refuses to run against `ijlcjthgwppllhlqocep`.
 
 **Why staging must be a hosted Supabase project, not plain Postgres.** The tests depend on four things Supabase provides outside the schema. Plain Postgres has none of them. The scratch copy used for this audit (PGlite) fakes `auth.uid()` as always null, so it only proves the schema and grants, not behaviour.
 
@@ -427,30 +436,28 @@ The migration only adds this project's own objects (the `public` and `private` s
 
 - **Versions:** production runs Postgres 17.6.1.155, Auth (GoTrue) v2.197.0, PostgREST v14.5 and Storage v1.77.5 (from `supabase link`). A new project may get newer versions. Record staging's versions next to the results.
 - **Email confirmation:** turned off in staging so the scripted sign-ups can log in. This doesn't affect RLS.
-- **Test 3c needs a tender whose closing date has passed,** and the CHECK constraint blocks creating one. Option A (fully faithful): create a tender closing today in setup and run 3c after midnight UTC. Option B (faster): drop the constraint in staging only, which makes staging differ from production for that one test.
+- **Test 3c needs a tender whose closing date has passed.** The closing-date CHECK constraint stays in place, exactly as in production. Instead, setup creates a tender that closes today (UTC), and the main script runs after the next midnight UTC.
 - **Sign-ups must carry a `full_name` of at least 2 characters** (see Cleanup). The setup script does this. Creating users from the dashboard fails.
 
 **Steps:**
 
-1. Create a new Supabase project for staging. In its SQL Editor, run [supabase/migrations/20261005025300_remote_schema.sql](supabase/migrations/20261005025300_remote_schema.sql). Do **not** apply the name-view fix yet.
+1. The owner creates the staging project in their own Supabase account and links it. In its SQL Editor, run [supabase/migrations/20261005025300_remote_schema.sql](supabase/migrations/20261005025300_remote_schema.sql). Do **not** apply the name-view fix yet. Check that `show timezone;` returns `UTC`, as it does in production.
 2. In Authentication → Providers → Email, turn **Confirm email** off.
 3. Create the five test accounts (setup script below).
-4. In the staging SQL Editor, expire one supplier's trial. For test 3c, pick option A or B. **Staging only.**
+4. In the staging SQL Editor, expire one supplier's trial, and create the tender for test 3c that closes today (UTC). **Staging only.**
 
    ```sql
    update public.supplier_profiles
    set trial_ends_at = now() - interval '1 day'
    where user_id = (select id from auth.users where email = 'ct-test-supplier-expired@example.com');
 
-   -- Option B for test 3c only:
-   alter table public.tenders drop constraint tenders_closing_date_check;
    insert into public.tenders (business_id, title, description, closing_date)
-   select id, 'Audit past tender', 'Closing date already passed', current_date - 1
+   select id, 'Audit past tender', 'Closes today (UTC); used by test 3c after midnight UTC', current_date
    from auth.users where email = 'ct-test-business-alpha@example.com'
    returning id;   -- use this as PAST_TENDER_ID
    ```
 
-5. Install the client with `npm install @supabase/supabase-js` in a scratch folder. Set `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `TEST_ACCOUNT_PASSWORD` and `PAST_TENDER_ID`, then run the main script with `node security-tests.mjs`.
+5. **After 00:00 UTC the next day:** install the client with `npm install @supabase/supabase-js` in a scratch folder. Set `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_PUBLISHABLE_KEY`, `TEST_ACCOUNT_PASSWORD` and `PAST_TENDER_ID`, then run the main script with `node security-tests.mjs`.
 6. Apply [the name-view fix](supabase/migrations/20261005031017_revoke_writes_on_public_name_views.sql) in staging. Tests 1d and 5f changed data, so reset it in the staging SQL Editor: 1d gave Supplier Expired a fresh trial, and 5f deleted Business Beta's business profile.
 
    ```sql
@@ -780,4 +787,11 @@ Afterwards, delete the staging project, or delete the five test users in Authent
 - **Auth settings:** apart from leaked-password protection, none were checked (email confirmation, sign-up limits, redirect URLs, session lifetime).
 - **Data:** no table data or stored files were read, so I can't say whether any existing data has already been affected by C1.
 - **What the migration file leaves out:** comments, sequences, default privileges and Auth configuration.
-- **Name-view fix:** tested only on the scratch copy of the schema, not yet on hosted Supabase. On the live project, `postgres` is a member of `anon` and `authenticated` (`pg_has_role`), so check 2 of [audit/verify-name-view-fix.sql](audit/verify-name-view-fix.sql) can switch roles in the SQL Editor.
+- **Name-view fix:** tested only on the scratch copy of the schema, not yet on hosted Supabase. Check 2 of [audit/verify-name-view-fix.sql](audit/verify-name-view-fix.sql) will not be run on production (the owner's decision); it remains for staging.
+
+---
+
+## 6. Phase 1 list
+
+- **P1. Replace the two public name views (permanent fix for C1).** Replace `supplier_names_public` and `business_names_public` with `security_invoker` views, or with a narrow function, that expose only company names. At the same time, revoke the grants on them that remain after the prepared fix: TRUNCATE, REFERENCES and TRIGGER. The live access list also shows MAINTAIN (Postgres 17), which can go too. This clears the advisor's `security_definer_view` errors. Note that a `security_invoker` view applies the base tables' RLS to the person querying, and today suppliers can read only their own profile row. So company names will only stay visible in bid lists if a read policy and column grants are added for exactly the name column.
+- **P2. Fix signup failing for names shorter than 2 characters.** The signup trigger `handle_new_caribbeantender_user` inserts an empty `full_name` when the name is missing, which `profiles_full_name_check` (2–120 characters) rejects. Repair the trigger's fallback, and make the registration form require at least 2 characters after trimming. Details are under Cleanup in section 3.
