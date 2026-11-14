@@ -1,0 +1,60 @@
+# Continuous integration (PRD section 11). Committed now; it runs once the repo is pushed.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # Lint waits on OPEN_QUESTIONS.md item 35 (typescript-eslint doesn't support TypeScript 7 yet).
+      - run: pnpm test
+      - run: pnpm test:database
+      - run: pnpm test:database:before-after
+      - run: pnpm exec vite build
+
+  # The RLS suite runs against the client's project (OPEN_QUESTIONS.md, decision D1), so only when
+  # started by hand from the Actions tab. It snapshots the row counts first and checks them after.
+  live-rls:
+    if: github.event_name == 'workflow_dispatch'
+    needs: checks
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: not-used-by-management-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.102.0
+      - name: Link the CLI and write the settings file
+        run: |
+          supabase link --project-ref "${{ secrets.PRODUCTION_PROJECT_REF }}"
+          {
+            echo "PRODUCTION_PROJECT_REF=${{ secrets.PRODUCTION_PROJECT_REF }}"
+            echo "PRODUCTION_SUPABASE_URL=${{ secrets.PRODUCTION_SUPABASE_URL }}"
+            echo "PRODUCTION_SUPABASE_PUBLISHABLE_KEY=${{ secrets.PRODUCTION_SUPABASE_PUBLISHABLE_KEY }}"
+            echo "PRODUCTION_SUPABASE_SECRET_KEY=${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}"
+          } > .env.production.local
+      - run: node scripts/export-project-data.ts backups/ci-before
+      - run: node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only backups/ci-before

@@ -29,3 +29,7 @@ dist/
 PRD.md
 # Local exports of project data (personal data; never committed)
 backups/
+
+# Playwright output
+test-results/
+playwright-report/

@@ -79,6 +79,13 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: cacheLifetimeMilliseconds, retry: 1 } },
 });
 
+// Error reporting (PRD 9.1; OPEN_QUESTIONS.md, item 15): off until VITE_SENTRY_DSN is set, and then
+// loaded after the app, so it never slows the first page. No personal data is sent.
+const sentryDsn: string = import.meta.env.VITE_SENTRY_DSN ?? '';
+if (sentryDsn) {
+  void import('@sentry/react').then((sentry) => sentry.init({ dsn: sentryDsn, sendDefaultPii: false, environment: import.meta.env.MODE }));
+}
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error('index.html is missing <div id="root">; the app has nowhere to render.');

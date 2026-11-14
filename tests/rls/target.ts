@@ -45,7 +45,8 @@ export type TestAccount = { client: SupabaseClient; userId: string; email: strin
 
 /** Ties every account in a run together, so cleanup removes exactly what this run created. */
 export const runIdentifier = process.env.RLS_RUN_ID ?? new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
-const testPassword = `Rls-${randomUUID()}`;
+/** Every test account's password in this run (random per run; the browser suite signs in with it). */
+export const testPassword = `Rls-${randomUUID()}`;
 
 /**
  * A confirmed user, created through the admin API so the project's "Confirm email" setting can stay
@@ -100,7 +101,7 @@ function decodeBase32(encoded: string): Buffer {
 }
 
 /** The current authenticator-app code for a TOTP secret (RFC 6238, as Supabase Auth uses). */
-function currentTotpCode(base32Secret: string): string {
+export function currentTotpCode(base32Secret: string): string {
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000 / totpStepSeconds)));
   const digest = createHmac('sha1', decodeBase32(base32Secret)).update(counter).digest();
@@ -110,7 +111,7 @@ function currentTotpCode(base32Secret: string): string {
 }
 
 /** An admin: staff row added as the owner would in the SQL Editor, then a TOTP factor enrolled and verified (aal2). */
-export async function createAdmin(label: string): Promise<TestAccount> {
+export async function createAdmin(label: string): Promise<TestAccount & { totpSecret: string }> {
   const account = await createAccount(label, 'business');
   const staff = await adminClient.from('staff_members').insert({ user_id: account.userId, role: 'admin' });
   assert.equal(staff.error, null, 'add the staff row');
@@ -125,7 +126,7 @@ export async function createAdmin(label: string): Promise<TestAccount> {
   if (verified.error) {
     throw new Error(`Could not verify TOTP for ${label}: ${verified.error.message}`);
   }
-  return account;
+  return { ...account, totpSecret: enrolled.data.totp.secret };
 }
 
 export async function expireTrial(supplier: TestAccount): Promise<void> {

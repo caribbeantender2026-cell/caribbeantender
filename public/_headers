@@ -1,0 +1,11 @@
+# Security headers for every page (PRD 8.10). Cloudflare Pages reads this file as it is;
+# scripts/serve-static.ts applies the same file on Railway, so the two hosts can't drift apart.
+# connect-src: the client's Supabase project (API, Auth, Storage, Edge Functions, Realtime) and Sentry.
+# img-src data: is for the authenticator QR code Supabase returns during MFA enrolment.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://ijlcjthgwppllhlqocep.supabase.co wss://ijlcjthgwppllhlqocep.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

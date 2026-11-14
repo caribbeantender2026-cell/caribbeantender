@@ -27,7 +27,7 @@ Last updated: 13 November 2026 (Stage 1).
 31. **TOTP on the client's project.** The admin tests enrol an authenticator factor, so TOTP MFA must be enabled.
     *Answered:* it is. The live run on 13 November 2026 enrolled and verified a factor (`tests/rls/runs/`). The client's owner should keep it on (DEPLOY.md step 6).
 
-32. **Length of the go-live trial.** None of the 6 existing suppliers can bid today (4 expired, 2 with trials that ended in October). At go-live a one-off migration gives every existing supplier a fresh trial (DEPLOY.md step 10).
+32. **Length of the go-live trial.** None of the 6 existing suppliers can bid today (4 expired, 2 with trials that ended in October). At go-live a one-off migration gives every existing supplier a fresh trial (DEPLOY.md step 11).
     *Default:* 14 days from go-live. Tevin confirms with the client.
 
 33. **Deadline reminders and the alerts setting.** PRD P1-13 lets users turn off *tender alerts*; it doesn't say whether that also stops the 24-hour reminders.
@@ -35,6 +35,19 @@ Last updated: 13 November 2026 (Stage 1).
 
 34. **Proving real delivery.** Sending is built and running, but nothing has been delivered yet. `RESEND_API_KEY` and `EMAIL_ALLOWLIST` aren't set, and the agent's login can't set Edge Function secrets.
     *Default:* the client's Owner sets both (DEPLOY.md step 9) with the test inboxes Tevin chooses. Then one live run shows a real receipt arriving.
+
+35. **Linting with TypeScript 7 (needs your decision).** Item 16 chose ESLint with typescript-eslint. Its newest release (8.72.1) supports TypeScript only below 6.1, and this project uses TypeScript 7.0.2, so it can't run. The options:
+    - (a) add TypeScript 6.0 alongside, only for linting: two compilers to keep in step;
+    - (b) a linter that doesn't need the TypeScript compiler, such as oxlint: a new dependency;
+    - (c) wait for typescript-eslint to support TypeScript 7.
+
+    *Default:* (c). CI leaves out the lint step until you choose. Type checking, the tests and the build all run.
+
+36. **Sentry in Edge Functions.** PRD 9.1 wants Sentry on the frontend and the Edge Functions. The frontend has it (item 15: off until `VITE_SENTRY_DSN` is set, and loaded after the app). The Edge Functions report errors in their HTTP responses and in Supabase's function logs.
+    *Default:* add Sentry to the three functions once the client has a Sentry project and DSN.
+
+37. **Lighthouse on the signed-in pages.** Mobile Lighthouse on the production build, behind the security headers: home 99 / 100, sign-up 100 / 100, About 99 / 100 (performance / accessibility). Browse and tender details need a session, which plain Lighthouse can't create. They use the same app shell plus a 3 kB page each.
+    *Default:* measure them with Chrome DevTools' Lighthouse while signed in to the deployed site, before go-live.
 
 ## Decisions that change the PRD
 

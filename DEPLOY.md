@@ -1,6 +1,6 @@
 # DEPLOY.md: production cutover (DRAFT)
 
-**Status:** draft, started in Stage 1 with the steps the database work creates. Stage 5 completes it (Edge Functions and secrets, Auth email templates, Resend DNS, hosting and domain, smoke tests).
+**Status:** complete for Phase 1 as of Stage 5 (2026-11-13). What is left needs the client's Owner or Administrator (steps 6 and 9), the hosting and DNS (step 10), and go-live day (step 11).
 
 **Who runs it:** decision D1 in OPEN_QUESTIONS.md replaced PRD hard rule 1. The coding agent works directly on the client project, which isn't live yet. Steps 1 to 5 were run on 2026-11-13 (see "Done on 2026-11-13" below). Step 6 needs the client's Owner or Administrator, because Tevin's Developer role can't change Auth or project settings.
 
@@ -120,7 +120,7 @@ Tevin's Developer role can't change these. "Now" is what the project showed on 2
 
 | Setting | Until go-live | At go-live |
 |---|---|---|
-| `EMAIL_ALLOWLIST` | The test inboxes only, comma-separated. Missing or empty sends **nothing**. | `*` (step 10) |
+| `EMAIL_ALLOWLIST` | The test inboxes only, comma-separated. Missing or empty sends **nothing**. | `*` (step 11) |
 | `RESEND_API_KEY` | A Resend key with sending access only. Without it, allowed emails are logged as `failed`. | Same |
 | `EMAIL_FROM` | Optional. Default `CaribbeanTender <no-reply@caribbeantender.com>`; the domain must be verified in Resend. | Same |
 | `SITE_URL` | Optional. Default `https://caribbeantender.com`; used for links in emails. | Same |
@@ -143,7 +143,37 @@ select status_code, content, created from net._http_response order by created de
 select type, status, count(*) from public.email_log group by 1, 2;
 ```
 
-## 10. Go-live
+## 10. Hosting, domain and email DNS
+
+**Build settings (either host).**
+- Build command `pnpm build`, output `dist/`, Node 22.18 or later.
+- Build-time variables, the same as `.env.local`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (the publishable key, never the secret one), `VITE_SUPPORT_EMAIL`, and optionally `VITE_SENTRY_DSN`.
+
+**Security headers (PRD 8.10)** are in `public/_headers`, copied to `dist/`.
+- Headers: CSP, HSTS, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Content-Type-Options` and `Permissions-Policy`.
+- The CSP allows connections only to this project (`https://ijlcjthgwppllhlqocep.supabase.co`) and Sentry. **If the Supabase project ever changes, update the address in `public/_headers`.**
+
+| Host | Setup |
+|---|---|
+| Railway | `railway.json` builds with `pnpm build` and starts `node scripts/serve-static.ts`. That server needs no dependencies: it serves `dist/`, answers every app route with `index.html`, and applies `dist/_headers` to every response. |
+| Cloudflare Pages | Framework "None", build `pnpm build`, output `dist`. Pages reads `dist/_headers` and `dist/_redirects` (every route goes to `index.html`) by itself. |
+
+**Domain:** point `caribbeantender.com` (and `www`, redirected to it) at the host, with HTTPS on. Then set the Auth Site URL and redirect URLs (step 6, rows 4 and 5).
+
+**Resend DNS (PRD P1-01, P1-13):**
+1. In Resend, add the domain `caribbeantender.com`.
+2. At the DNS provider, add the SPF (TXT) and DKIM (TXT or CNAME) records Resend shows; optionally add a DMARC record (`_dmarc`, TXT, `v=DMARC1; p=none;` to start).
+3. Wait until Resend shows the domain as verified.
+4. Set custom SMTP (step 6, row 2) and the Edge Function settings (step 9).
+
+**Checks after deploying:**
+- Open `/` and `/tenders`. A visitor is sent to sign in.
+- `curl.exe -sI https://caribbeantender.com/tenders` shows the security headers.
+- Sign in as a test business and a test supplier, then repeat the end-to-end flow by hand: post, bid, closing, award, downloads, a form PDF.
+- `pnpm test:e2e` and `pnpm test:rls:live` pass against the project. Both clean up after themselves.
+- Security Advisor: zero errors.
+
+## 11. Go-live
 
 Run these in order on go-live day, after the new frontend is live.
 
@@ -165,6 +195,12 @@ Run these in order on go-live day, after the new frontend is live.
    ```
    This replaces the allowlist rather than deleting the setting, because an empty or missing setting sends nothing (step 9). Emails suppressed before go-live stay suppressed, so nobody gets a backlog of test-period emails.
 
-## 11. Rollback
+## 12. Rollback
 
-Restore the backup from step 1 (point-in-time recovery to just before step 4, or the logical dump), then restore the Site URL. Stage 5 adds the frontend and Edge Function rollback.
+| What went wrong | Undo |
+|---|---|
+| Emails going where they shouldn't | Set `EMAIL_ALLOWLIST` to empty: nothing is sent from the next minute on. To stop the job entirely: `select cron.unschedule('send-notifications');` |
+| A frontend deploy | Railway: **Deployments → the previous deployment → Rollback**. Cloudflare Pages: **Deployments → the previous one → Rollback to this deployment**. |
+| An Edge Function | Check out the previous commit and deploy that function again (`supabase functions deploy <name> --project-ref <production ref> --use-api`). |
+| The go-live trials | Set the trial end dates back in the Table Editor (`subscriptions`). They are dates only, and no other data changes. |
+| The database | Restore the backup from step 1 (point-in-time recovery to just before the change, or the logical dump). Then set the Site URL back. The exported JSON in `backups/2026-11-13/` is the record of every row and file as they were before the migrations. |
