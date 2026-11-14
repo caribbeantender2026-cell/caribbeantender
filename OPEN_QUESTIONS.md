@@ -30,6 +30,12 @@ Last updated: 13 November 2026 (Stage 1).
 32. **Length of the go-live trial.** None of the 6 existing suppliers can bid today (4 expired, 2 with trials that ended in October). At go-live a one-off migration gives every existing supplier a fresh trial (DEPLOY.md step 10).
     *Default:* 14 days from go-live. Tevin confirms with the client.
 
+33. **Deadline reminders and the alerts setting.** PRD P1-13 lets users turn off *tender alerts*; it doesn't say whether that also stops the 24-hour reminders.
+    *Default:* yes, turning alerts off stops reminders too (fewer unwanted emails). Reminders are only sent for tenders published more than a day before closing, so they never arrive together with the alert.
+
+34. **Proving real delivery.** Sending is built and running, but nothing has been delivered yet. `RESEND_API_KEY` and `EMAIL_ALLOWLIST` aren't set, and the agent's login can't set Edge Function secrets.
+    *Default:* the client's Owner sets both (DEPLOY.md step 9) with the test inboxes Tevin chooses. Then one live run shows a real receipt arriving.
+
 ## Decisions that change the PRD
 
 - **D1 (Tevin, 13 November 2026): work directly on the client's Supabase project.** No staging and no Docker. Stage 1 is applied to and tested on the client's project (`ijlcjthgwppllhlqocep`), which isn't live yet; Tevin accepts the risk. This **replaces PRD hard rule 1** ("never connect to the production project") and the staging plan (PRD 9.3, OPEN_QUESTIONS items 1, 3 and 4). Limits that still apply on that project:

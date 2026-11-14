@@ -168,13 +168,40 @@ const fullRun = runSuite('tests/rls/rls.test.ts', connection);
 
 let cleanupSection = '';
 if (target === 'live') {
+  // Before cleanup removes them: every email the run caused, by status. Until go-live each must be
+  // suppressed (OPEN_QUESTIONS.md, D3), including alerts to real suppliers about test tenders.
+  const runAccounts = `select id from auth.users where email like 'rls-test-${runIdentifier}-%'`;
+  const emailsByStatus = query(
+    connection,
+    `select log.type, log.status, count(*) as emails from public.email_log log
+     where log.recipient like 'rls-test-${runIdentifier}-%'
+        or log.entity_id in (select tender.id from public.tenders tender where tender.business_id in (${runAccounts}))
+        or log.entity_id in (select bid.id from public.bids bid where bid.supplier_id in (${runAccounts}))
+     group by 1, 2 order by 1, 2`,
+  );
+  const senderCalls = query(connection, `select status_code, count(*) as calls from net._http_response where created > now() - interval '10 minutes' group by 1 order by 1`);
+  const anyEmailSent = /,sent,/.test(emailsByStatus);
+  if (anyEmailSent) process.exitCode = 1;
+  const fence = '```';
+  const emailSection = `
+## Emails the run caused, before cleanup: **${anyEmailSent ? 'SOME WERE SENT' : 'none sent'}**
+${fence}
+${emailsByStatus || '(none)'}
+${fence}
+
+send-notifications calls by pg_cron in the last 10 minutes, by HTTP status:
+${fence}
+${senderCalls || '(none)'}
+${fence}
+`;
+
   // Runs whether or not the suite passed: a failed run still leaves test data behind.
   console.log(`\nRemoving the test data of run ${runIdentifier}...`);
   const cleanup = runNode(['scripts/cleanup-rls-test-data.ts', runIdentifier]);
   const afterFolder = `${backupFolder}-after-rls-${runIdentifier}`;
   const exported = runNode(['scripts/export-project-data.ts', afterFolder]);
   const comparison = exported.passed ? compareCounts(backupFolder, afterFolder) : 'The export failed; see the output above.';
-  cleanupSection = `
+  cleanupSection = `${emailSection}
 ## Cleanup of run ${runIdentifier}: **${cleanup.passed ? 'complete' : 'INCOMPLETE'}**
 \`\`\`
 ${cleanup.output.trim()}

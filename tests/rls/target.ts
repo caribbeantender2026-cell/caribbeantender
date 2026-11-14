@@ -73,6 +73,12 @@ export async function createAccount(label: string, accountType: 'business' | 'su
   return { client, userId: signedIn.data.user.id, email };
 }
 
+/** Whether a test account can start a new session (a banned account can't). */
+export async function canSignIn(email: string): Promise<boolean> {
+  const signedIn = await createClient(supabaseUrl, publishableKey, clientOptions).auth.signInWithPassword({ email, password: testPassword });
+  return signedIn.error === null;
+}
+
 const base32Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const totpStepSeconds = 30;
 const totpDigits = 6;

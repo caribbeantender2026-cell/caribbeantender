@@ -10,6 +10,7 @@ import {
   adminClient,
   anonymousClient,
   createAccount,
+  canSignIn,
   createAdmin,
   expireTrial,
   fileOf,
@@ -306,12 +307,17 @@ describe(`RLS suite (${supabaseUrl})`, () => {
     assert.deepEqual((await business.client.from('audit_log').select('id')).data ?? [], [], 'others do not');
   });
 
-  test('P1-15/Q21: a deactivated business cannot publish, extend or cancel while its token is still valid', async () => {
+  test('P1-15/Q21: deactivating through set-user-active stops writes at once, even with a valid token, and blocks signing in', async () => {
     const draft = await createDraft(otherBusiness, 3600, 'Draft before deactivation');
-    assert.equal((await admin.client.rpc('admin_set_user_active', { user_id: otherBusiness.userId, is_active: false })).error, null);
+    const setActive = (isActive: boolean) => admin.client.functions.invoke('set-user-active', { body: { user_id: otherBusiness.userId, is_active: isActive } });
+    assert.equal((await setActive(false)).error, null, 'deactivate');
     assert.match((await otherBusiness.client.rpc('publish_tender', { tender_id: draft.id })).error?.message ?? '', /deactivated/);
     assert.match((await otherBusiness.client.rpc('cancel_tender', { tender_id: cronTender.id, reason: 'x' })).error?.message ?? '', /deactivated/);
-    assert.equal((await admin.client.rpc('admin_set_user_active', { user_id: otherBusiness.userId, is_active: true })).error, null);
+    assert.equal(await canSignIn(otherBusiness.email), false, 'banned in Supabase Auth');
+    const notStaff = await business.client.functions.invoke('set-user-active', { body: { user_id: otherBusiness.userId, is_active: true } });
+    assert.ok(notStaff.error, 'only staff with MFA can reactivate');
+    assert.equal((await setActive(true)).error, null, 'reactivate');
+    assert.equal(await canSignIn(otherBusiness.email), true, 'unbanned');
   });
 
   // After the main tender's closing time.

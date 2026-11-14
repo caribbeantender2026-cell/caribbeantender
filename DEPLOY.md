@@ -13,9 +13,9 @@
 | 1. Backup | Every public table, the auth users (id, email, created_at, metadata) and the list of stored files exported as JSON to `backups/2026-11-13/` (gitignored, kept on Tevin's machine). Supabase's own daily backup is the restore point. |
 | 2. Pre-checks | Every check passed. 4 suppliers had no subscription status; they became `expired` (OPEN_QUESTIONS.md, D2). |
 | 3. C1 fix | Not applied by hand, so `20261005031017` was pushed with the rest. |
-| 4. Migrations | `20261005025300` marked applied; `20261005031017` and `20261005040050` to `20261005041100` applied one at a time, with no failures. `20261113230000` (email_log `suppressed`) applied the same day. |
+| 4. Migrations | `20261005025300` marked applied; `20261005031017` and `20261005040050` to `20261005041100` applied one at a time, with no failures. `20261113230000` (email_log `suppressed`) and `20261114010000` (email sending: `due_emails`, `pg_net`, the `send-notifications` cron job) were each committed, then applied on their own the same day. |
 | 5. payment-webhook | Deleted; a POST now returns 404. |
-| Edge Functions | `download-document` deployed (Stage 3): it signs 60-second download links after `request_document_download` checks and logs the request. It sends no email. Redeploy after changing it: `supabase functions deploy download-document --project-ref <production ref> --use-api`. |
+| Edge Functions | Deployed with `supabase functions deploy <name> --project-ref <production ref> --use-api`; redeploy after changing one. `download-document` (Stage 3) signs 60-second download links after `request_document_download` checks and logs the request. `send-notifications` (Stage 2, deployed with `--no-verify-jwt`; it checks the Vault secret instead) sends the due emails (step 9). `set-user-active` (Stage 2) records a deactivation as the admin, then bans or unbans the account in Auth. |
 | Checks after | Security Advisor: 0 errors, 13 warnings (12 intended signed-in remote procedures, plus leaked-password protection off), 1 info. The RLS suite passed 26 of 26 against the project (`tests/rls/runs/2026-11-14T03-31-02-116Z-live.md`); its `rls-test-<run id>` accounts, rows and files were removed, and every existing table's row count matches the backup. |
 
 ## 1. Backup
@@ -107,15 +107,41 @@ Tevin's Developer role can't change these. "Now" is what the project showed on 2
 - **Security Advisor:** **zero errors** (PRD 8.9). Expected warnings: the intended remote procedures (`submit_bid`, `publish_tender`, `admin_*`, …) are security-definer functions callable by signed-in users, which is how the PRD wants them; each checks the caller itself.
 - **Smoke tests:** Stage 5 adds these.
 
-## 9. Email safety until go-live (OPEN_QUESTIONS.md, D3)
+## 9. Emails (Stage 2) and email safety until go-live (OPEN_QUESTIONS.md, D3)
 
-Before **any** Edge Function that sends email is deployed, set the allowlist to the test inboxes only:
+**How it works:** every minute `pg_cron` calls the `send-notifications` Edge Function through `pg_net`, with a shared secret. `public.due_emails` decides what is due: bid receipts, new tender alerts, 24-hour reminders and bids opened. Each email goes through `email_log`, so it goes out at most once.
+
+**Done on 2026-11-13:**
+- `send-notifications` and `set-user-active` are deployed.
+- Vault holds `send_notifications_url` and `send_notifications_cron_secret`. The secret was generated randomly and isn't kept anywhere else.
+- The first call returned 200 with nothing due.
+
+**Edge Function settings.** The coding agent's CLI login can't manage these (`supabase secrets` says no access token), so the client's Owner or Administrator sets them, under **Edge Functions → Secrets** or with the CLI:
+
+| Setting | Until go-live | At go-live |
+|---|---|---|
+| `EMAIL_ALLOWLIST` | The test inboxes only, comma-separated. Missing or empty sends **nothing**. | `*` (step 10) |
+| `RESEND_API_KEY` | A Resend key with sending access only. Without it, allowed emails are logged as `failed`. | Same |
+| `EMAIL_FROM` | Optional. Default `CaribbeanTender <no-reply@caribbeantender.com>`; the domain must be verified in Resend. | Same |
+| `SITE_URL` | Optional. Default `https://caribbeantender.com`; used for links in emails. | Same |
 
 ```powershell
-supabase secrets set EMAIL_ALLOWLIST="<test inbox 1>,<test inbox 2>" --project-ref <production ref>
+supabase secrets set EMAIL_ALLOWLIST="<test inbox 1>,<test inbox 2>" RESEND_API_KEY="<key>" --project-ref <production ref>
 ```
 
-An email to any other address is recorded in `email_log` as `suppressed` and never sent, so publishing a test tender can't email a real supplier. If the setting is missing or empty, **nothing** is sent: a function deployed before its setting, or a setting deleted by mistake, can't email anyone.
+An email to any address outside the allowlist is recorded in `email_log` as `suppressed` and never sent, so publishing a test tender can't email a real supplier.
+
+**Moving to a new project (or after a restore that lost Vault):** create both Vault entries once, in the SQL Editor:
+```sql
+select vault.create_secret('https://<project ref>.supabase.co/functions/v1/send-notifications', 'send_notifications_url');
+select vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'send_notifications_cron_secret');
+```
+
+**Check it is running:**
+```sql
+select status_code, content, created from net._http_response order by created desc limit 5;  -- 200 with counts
+select type, status, count(*) from public.email_log group by 1, 2;
+```
 
 ## 10. Go-live
 
