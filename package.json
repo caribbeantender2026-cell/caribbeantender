@@ -14,8 +14,9 @@
     "test": "node --test \"tests/app/**/*.test.ts\"",
     "test:database": "node --test --test-concurrency=1 \"tests/database/**/*.test.ts\"",
     "test:database:before-after": "node tests/database/before-after.ts",
-    "test:staging": "node --env-file=.env.staging.local --test --test-concurrency=1 \"tests/staging/**/*.test.ts\"",
-    "types:local": "node scripts/generate-database-types.ts"
+    "types:local": "node scripts/generate-database-types.ts",
+    "test:rls:local": "node scripts/run-rls.ts local",
+    "test:rls:staging": "node --env-file=.env.staging.local scripts/run-rls.ts staging --reset-staging"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

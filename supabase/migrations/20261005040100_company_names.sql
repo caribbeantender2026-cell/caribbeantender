@@ -1,15 +1,12 @@
--- C1 / P1: replace the two name views that bypassed row-level security.
+-- C1: replace the two name views that bypassed row-level security (AUDIT.md C1, PRD section 7).
 --
--- A security_invoker view over business_profiles or supplier_profiles cannot work here: RLS is
--- per row and column grants are per role, so a policy letting a business read a bidder's row would
--- also expose that bidder's phone, address and email. Instead, company names get their own narrow
--- table holding nothing else, kept in sync by triggers, and the views read from it as the caller.
+-- A security_invoker view directly over business_profiles or supplier_profiles cannot work: RLS is
+-- per row and column grants are per role, so letting other users read a profile row for its name
+-- would also expose its phone number, address and email. Company names get their own narrow table
+-- instead, kept in step by triggers, and the views read it as the caller.
 --
--- Who may read a name is decided by reusing the existing rules rather than restating them:
---   * a business name is visible to anyone who can see one of that business's tenders;
---   * a supplier name is visible to anyone who can see one of that supplier's bids
---     (so it stays hidden while bids are sealed);
---   * everyone can see their own names.
+-- Who can read: every signed-in user, every company name (PRD P1-03). A name on its own doesn't
+-- show who bid on what; bids stay sealed by their own rules. Visitors who are not signed in see none.
 
 create table public.company_names (
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -19,7 +16,7 @@ create table public.company_names (
 );
 
 comment on table public.company_names is
-  'Public-facing company names only. Written by triggers on business_profiles and supplier_profiles; never by clients.';
+  'Company names only, readable by signed-in users. Written by triggers on business_profiles and supplier_profiles; never by clients.';
 
 insert into public.company_names (user_id, account_type, company_name)
 select user_id, 'business'::public.account_type, company_name from public.business_profiles
@@ -59,25 +56,9 @@ for each row execute function private.sync_company_name('supplier');
 
 alter table public.company_names enable row level security;
 
-create policy company_names_read_business on public.company_names
-for select to anon, authenticated
-using (
-  account_type = 'business'
-  and (
-    user_id = (select auth.uid())
-    or exists (select 1 from public.tenders tender where tender.business_id = company_names.user_id)
-  )
-);
-
-create policy company_names_read_supplier on public.company_names
+create policy company_names_read_signed_in on public.company_names
 for select to authenticated
-using (
-  account_type = 'supplier'
-  and (
-    user_id = (select auth.uid())
-    or exists (select 1 from public.bids bid where bid.supplier_id = company_names.user_id)
-  )
-);
+using (true);
 
 drop view public.business_names_public;
 drop view public.supplier_names_public;
@@ -88,9 +69,9 @@ select user_id, company_name from public.company_names where account_type = 'bus
 create view public.supplier_names_public with (security_invoker = true) as
 select user_id, company_name from public.company_names where account_type = 'supplier';
 
--- Read-only for everyone except the service role. "revoke all" also removes TRUNCATE,
--- REFERENCES, TRIGGER and MAINTAIN, which the old views granted.
+-- SELECT only, for signed-in users. "revoke all" also removes TRUNCATE, REFERENCES, TRIGGER and
+-- MAINTAIN, which the old views granted to everyone.
 revoke all on public.company_names, public.business_names_public, public.supplier_names_public
   from public, anon, authenticated, service_role;
-grant select on public.company_names, public.business_names_public to anon, authenticated, service_role;
-grant select on public.supplier_names_public to authenticated, service_role;
+grant select on public.company_names, public.business_names_public, public.supplier_names_public
+  to authenticated, service_role;

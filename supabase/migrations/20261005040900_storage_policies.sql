@@ -1,18 +1,24 @@
--- Storage rules matching the bid rules and sealed bids.
+-- Storage rules matching the tender and bid rules (PRD 8.5; AUDIT.md H1/A4, issue 6/A5, M3, M4, M5).
 --
--- Bid documents:
---   * upload only into your own folder, and only with an active trial or subscription;
---   * never updated or deleted, so the file behind a submitted bid cannot be swapped (AUDIT.md H1);
---   * read only after recording the download in the audit log, which itself is allowed only for
---     a bid the reader can see. So the seal and the audit trail apply to files as well as rows.
--- Tender documents:
---   * signed-in users only (AUDIT.md M3), and only for tenders they can see (no one else's drafts);
---   * never updated or deleted once uploaded.
--- Both buckets: at most 20 uploads per person per day (AUDIT.md M4).
+-- Paths are namespaced by tender and bid (OPEN_QUESTIONS.md, item 11):
+--   tender-documents/{tender_id}/{file}                     a draft's supporting documents
+--   tender-documents/{tender_id}/requirements-form/{file}   a draft's uploaded requirements form
+--   bid-documents/{tender_id}/{bid_id}/{file}               a bid's supporting documents
+--   bid-documents/{tender_id}/{bid_id}/proposal/{file}      a bid's uploaded proposal
 --
--- Excel: .xlsx is now allowed, because suppliers price bids in spreadsheets and the form already
--- offered Excel. Legacy .xls is not: old binary Office formats can carry macros. (.doc has the same
--- risk and stays allowed for now; dropping it is a product decision.)
+-- Uploads: only into your own draft's folder, or into the folder of a bid you haven't submitted yet,
+-- on an open tender you may bid on. Once a bid exists, nothing more can be uploaded to its folder.
+-- At most 20 uploads per person per day, per bucket.
+--
+-- Write-once: nobody updates or deletes a file once its draft is published or its bid submitted.
+-- Before that, the uploader may remove their own file.
+--
+-- Downloads: users get no read access to published tender files or submitted bid files at all.
+-- request_document_download checks the rules and logs the request; an Edge Function then signs a
+-- URL valid for 60 seconds (Stage 2). That keeps every download logged and every link short-lived,
+-- which a browser-chosen signed-URL lifetime could not guarantee.
+--
+-- Excel: .xls and .xlsx are allowed on both buckets, as PRD 8.5 requires.
 
 drop policy if exists "authenticated users read tender files" on storage.objects;
 drop policy if exists "bid parties read bid files" on storage.objects;
@@ -27,13 +33,30 @@ drop policy if exists "supplier manages own bid files" on storage.objects;
 drop policy if exists "supplier uploads own bid files" on storage.objects;
 
 update storage.buckets
-set allowed_mime_types = array[
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-]
+set
+  file_size_limit = 10485760,
+  allowed_mime_types = array[
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ]
 where id in ('bid-documents', 'tender-documents');
+
+-- Printable copies of the standard forms (PRD P1-11). Written only by staff through the dashboard.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'form-templates', 'form-templates', false, 10485760,
+  array[
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ]
+)
+on conflict (id) do nothing;
 
 -- Security definer so the count sees all of the caller's files without a read policy on them.
 create function private.uploads_in_last_day(bucket_name text) returns integer
@@ -49,92 +72,185 @@ as $$
     and stored_object.created_at > now() - interval '1 day';
 $$;
 
-revoke all on function private.uploads_in_last_day(text) from public, anon, authenticated;
-grant execute on function private.uploads_in_last_day(text) to authenticated;
+-- Whether a tender folder belongs to one of the caller's drafts.
+create function private.is_own_draft_tender_folder(tender_folder text) returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.tenders tender
+    where tender.id = private.try_uuid(tender_folder)
+      and tender.business_id = (select auth.uid())
+      and tender.status = 'draft'
+  );
+$$;
 
-create policy bid_documents_upload_own on storage.objects
-for insert to authenticated
-with check (
-  bucket_id = 'bid-documents'
-  and (storage.foldername(name))[1] = (select auth.uid())::text
-  and (select private.supplier_has_access((select auth.uid())))
-  and (select private.uploads_in_last_day('bid-documents')) < 20
-);
+-- Whether the caller may upload into this bid folder: the same tests submit_bid will apply,
+-- plus "no bid with this id exists yet" (OPEN_QUESTIONS.md, item 11).
+create function private.can_upload_to_bid_folder(tender_folder text, bid_folder text) returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.try_uuid(bid_folder) is not null
+    and exists (
+      select 1 from public.tenders tender
+      where tender.id = private.try_uuid(tender_folder)
+        and tender.status = 'open'
+        and tender.closes_at > clock_timestamp()
+        and tender.business_id <> (select auth.uid())
+    )
+    and exists (select 1 from public.supplier_profiles supplier where supplier.user_id = (select auth.uid()))
+    and private.supplier_has_access((select auth.uid()))
+    and not exists (select 1 from public.bids bid where bid.id = private.try_uuid(bid_folder))
+    and not exists (
+      select 1 from public.bids bid
+      where bid.tender_id = private.try_uuid(tender_folder) and bid.supplier_id = (select auth.uid())
+    );
+$$;
 
-create policy bid_documents_read_after_recorded_download on storage.objects
-for select to authenticated
-using (
-  bucket_id = 'bid-documents'
-  and exists (
-    select 1
-    from public.audit_log download
-    where download.event_type = 'bid_document_download'
-      and download.actor_id = (select auth.uid())
-      and download.details ->> 'document_path' = objects.name
-      and download.occurred_at > now() - interval '5 minutes'
-  )
-);
+-- Whether a bid folder is the caller's and its bid hasn't been submitted (files can still be removed).
+create function private.is_own_unsubmitted_bid_folder(bid_folder text) returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select private.try_uuid(bid_folder) is not null
+    and not exists (select 1 from public.bids bid where bid.id = private.try_uuid(bid_folder));
+$$;
 
-create policy tender_documents_upload_own on storage.objects
+create policy tender_documents_upload_to_own_draft on storage.objects
 for insert to authenticated
 with check (
   bucket_id = 'tender-documents'
-  and (storage.foldername(name))[1] = (select auth.uid())::text
-  and exists (select 1 from public.business_profiles business where business.user_id = (select auth.uid()))
+  and (select private.caller_is_active())
+  and private.is_own_draft_tender_folder((storage.foldername(name))[1])
+  and (
+    cardinality(storage.foldername(name)) = 1
+    or (cardinality(storage.foldername(name)) = 2 and (storage.foldername(name))[2] = 'requirements-form')
+  )
   and (select private.uploads_in_last_day('tender-documents')) < 20
 );
 
--- The tenders subquery runs under the tenders policies: published tenders, plus your own drafts.
--- The file must also sit in that tender's business's own folder. A business can type any path into
--- its own tender's document_path, so without this it could point a tender at another business's
--- unpublished file and read it, or publish it to everyone.
-create policy tender_documents_read on storage.objects
+create policy tender_documents_manage_own_draft on storage.objects
 for select to authenticated
 using (
   bucket_id = 'tender-documents'
-  and (
-    (storage.foldername(name))[1] = (select auth.uid())::text
-    or exists (
-      select 1
-      from public.tenders tender
-      where tender.document_path = objects.name
-        and (storage.foldername(objects.name))[1] = tender.business_id::text
-    )
-  )
+  and owner_id = (select auth.uid())::text
+  and private.is_own_draft_tender_folder((storage.foldername(name))[1])
 );
 
--- One call for the app: record the download, then return the path to sign. It runs as the caller,
--- so the bids policies decide whether the bid is visible; nothing here restates those rules.
-create function public.request_bid_document_download(requested_bid_id uuid) returns text
+create policy tender_documents_remove_from_own_draft on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'tender-documents'
+  and owner_id = (select auth.uid())::text
+  and private.is_own_draft_tender_folder((storage.foldername(name))[1])
+);
+
+create policy bid_documents_upload_before_submission on storage.objects
+for insert to authenticated
+with check (
+  bucket_id = 'bid-documents'
+  and (select private.caller_is_active())
+  and private.can_upload_to_bid_folder((storage.foldername(name))[1], (storage.foldername(name))[2])
+  and (
+    cardinality(storage.foldername(name)) = 2
+    or (cardinality(storage.foldername(name)) = 3 and (storage.foldername(name))[3] = 'proposal')
+  )
+  and (select private.uploads_in_last_day('bid-documents')) < 20
+);
+
+create policy bid_documents_manage_own_before_submission on storage.objects
+for select to authenticated
+using (
+  bucket_id = 'bid-documents'
+  and owner_id = (select auth.uid())::text
+  and private.is_own_unsubmitted_bid_folder((storage.foldername(name))[2])
+);
+
+create policy bid_documents_remove_own_before_submission on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'bid-documents'
+  and owner_id = (select auth.uid())::text
+  and private.is_own_unsubmitted_bid_folder((storage.foldername(name))[2])
+);
+
+create policy form_templates_read_signed_in on storage.objects
+for select to authenticated
+using (bucket_id = 'form-templates');
+
+-- Checks whether the caller may download a document, logs the request, and returns where it is.
+-- Tender documents: any signed-in user for a published tender. Bid documents: the supplier who
+-- submitted the bid, or the tender's business once the bids are open. Admins: no bid documents in
+-- Phase 1 (OPEN_QUESTIONS.md, item 19). The Edge Function signs the URL for 60 seconds.
+create function public.request_document_download(document_id uuid) returns jsonb
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
-  visible_tender_id uuid;
-  visible_document_path text;
+  caller_id uuid := private.require_active_user();
+  found_bucket text;
+  found_path text;
+  found_file_name text;
+  bid_supplier_id uuid;
+  bid_tender_id uuid;
+  tender_owner_id uuid;
+  tender_status public.tender_status;
+  allowed boolean := false;
 begin
-  select bid.tender_id, bid.document_path
-  into visible_tender_id, visible_document_path
-  from public.bids bid
-  where bid.id = requested_bid_id;
+  select 'tender-documents', document.storage_path, document.file_name, tender.business_id, tender.status
+  into found_bucket, found_path, found_file_name, tender_owner_id, tender_status
+  from public.tender_documents document
+  join public.tenders tender on tender.id = document.tender_id
+  where document.id = request_document_download.document_id;
 
-  if not found then
-    raise exception 'Bid document not available' using errcode = 'insufficient_privilege';
+  if found then
+    allowed := tender_status <> 'draft' or tender_owner_id = caller_id;
+  else
+    select 'bid-documents', document.storage_path, document.file_name, bid.supplier_id, bid.tender_id, tender.business_id
+    into found_bucket, found_path, found_file_name, bid_supplier_id, bid_tender_id, tender_owner_id
+    from public.bid_documents document
+    join public.bids bid on bid.id = document.bid_id
+    join public.tenders tender on tender.id = bid.tender_id
+    where document.id = request_document_download.document_id;
+
+    if found then
+      if bid_supplier_id = caller_id then
+        allowed := true;
+      elsif tender_owner_id = caller_id and private.bids_are_open(bid_tender_id) then
+        allowed := true;
+        -- A business reaching a bid file is an opening, even if it never listed the bids.
+        perform private.record_bids_opened(bid_tender_id);
+      end if;
+    end if;
   end if;
 
-  insert into public.audit_log (event_type, actor_id, tender_id, bid_id, details)
-  values (
-    'bid_document_download',
-    (select auth.uid()),
-    visible_tender_id,
-    requested_bid_id,
-    jsonb_build_object('document_path', visible_document_path)
-  );
+  -- One message for "missing" and "not yours", so ids can't be probed.
+  if not allowed then
+    raise exception 'Document not found.' using errcode = 'no_data_found';
+  end if;
 
-  return visible_document_path;
+  perform private.write_audit_log('document_download_url_issued', 'document', request_document_download.document_id,
+    jsonb_build_object('bucket', found_bucket, 'path', found_path));
+
+  return jsonb_build_object('bucket', found_bucket, 'path', found_path, 'file_name', found_file_name);
 end;
 $$;
 
-revoke all on function public.request_bid_document_download(uuid) from public, anon, authenticated;
-grant execute on function public.request_bid_document_download(uuid) to authenticated;
+revoke all on function private.uploads_in_last_day(text) from public, anon, authenticated;
+revoke all on function private.is_own_draft_tender_folder(text) from public, anon, authenticated;
+revoke all on function private.can_upload_to_bid_folder(text, text) from public, anon, authenticated;
+revoke all on function private.is_own_unsubmitted_bid_folder(text) from public, anon, authenticated;
+revoke all on function public.request_document_download(uuid) from public, anon, authenticated;
+grant execute on function private.uploads_in_last_day(text) to authenticated;
+grant execute on function private.is_own_draft_tender_folder(text) to authenticated;
+grant execute on function private.can_upload_to_bid_folder(text, text) to authenticated;
+grant execute on function private.is_own_unsubmitted_bid_folder(text) to authenticated;
+grant execute on function public.request_document_download(uuid) to authenticated;

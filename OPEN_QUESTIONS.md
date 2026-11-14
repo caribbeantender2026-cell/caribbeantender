@@ -1,85 +1,57 @@
 # Open questions
 
-Questions found while building, per PRD hard rule 4. Each has the default I'll follow if there's no answer, so none of them blocks work. The client questions in PRD section 13 (forms, About Us, legal text, category list, Pro plan, Railway account, DNS, verification setting, withdrawals, contact email, C1 status, branding) are still open too and aren't repeated here.
+Questions found while building, per PRD hard rule 4. The client questions in PRD section 13 (forms, About Us, legal text, category list, Pro plan, Railway account, DNS, verification setting, withdrawals, contact email, C1 status, branding) are still open and aren't repeated here.
 
-Last updated: 13 November 2026 (Stage 0).
+Last updated: 13 November 2026 (Stage 1).
 
-## Needed before Stage 1
+## Open
 
-1. **Test environments.** The PRD's local stack needs Docker; Docker is installed but its engine isn't running, and I haven't started it. The Playwright sign-up test needs the local mail catcher, which runs in that stack.
-   *Default:* run the RLS suite on staging, and run the e-mail-confirmation test only once you've started Docker. If Docker stays off, the confirmation step is tested by hand.
+25. **Is the requirements form required to publish?** PRD P1-06 lists it among a tender's fields.
+    *Default:* yes. `publish_tender` refuses a draft without one, filled in online or uploaded under `requirements-form/`. Say if it should be optional while the client's real forms are missing.
 
-2. **PGlite.** I added `@electric-sql/pglite` in October as a fast local Postgres for the database tests, before I knew new dependencies need approval.
-   *Default:* keep it as a quick pre-check that runs in seconds; staging stays the real proof. Say no and I'll remove it and its harness.
+26. **Awarding straight after the deadline.** `award_tender` needs the status `closed`, which the scheduled job sets within a minute of `closes_at`. The business can read the bids from `closes_at`, but must wait up to a minute to award.
+    *Default:* keep it; the UI says "closing…" for that minute.
 
-3. **Comparing staging with production.** Hard rule 1 means I can't read production's settings.
-   *Default:* check staging against the production values already recorded in `AUDIT.md` (Postgres 17.6.1.155, Auth v2.197.0, PostgREST v14.5, Storage v1.77.5, timezone UTC). For Auth settings, you export production's config yourself into a gitignored file if you want them compared.
+27. **What deactivation blocks.** A deactivated user can't use any write function, create or edit drafts, fill in forms or upload. Reads stay possible until the Auth ban (Stage 2) ends their session.
+    *Default:* as described.
 
-4. **The staging secret key in tests.** The PRD keeps the service role key in Edge Functions only. The staging RLS suite needs a privileged way to create confirmed users and set up states such as an expired trial.
-   *Default:* allow the **staging** secret key in `.env.staging.local`, for local test setup only. It's never committed, never used in the browser, and never a production key.
+28. **Bid file uploaded at the moment of submission.** If a supplier's upload commits at the same instant their own `submit_bid` does, the file can land in the folder without being recorded on the bid. It's never shown or downloadable, because downloads go through the recorded documents.
+    *Default:* accept it (harmless); a cleanup job can remove such files later.
 
-5. **How suppliers get a category for alerts.** The PRD sends tender alerts to "suppliers whose category matches", but its data model gives suppliers no category. Today they have a free-text `industry_category` chosen from 6 values.
-   *Default:* add `category_id` to `supplier_profiles` and fill it from `industry_category` by name. Seed `categories` with the legacy 6 (Goods and Supplies, Works, Professional Services, Technology Services, Security Services, Cleaning and Janitorial), marked as a draft list pending the client's.
+29. **`subscription_events` cascade.** Kept untouched (item 7), so it still deletes a supplier's events if their supplier profile is deleted. Profiles can't be deleted through the API, so only the owner could trigger it.
+    *Default:* leave it until Phase 3 designs payments.
 
-6. **A business bidding on its own tender.** One login can hold both account types, so a business could bid on its own tender with its supplier account. The PRD doesn't mention this.
-   *Default:* keep the database rule that refuses it.
+30. **Names over 120 characters at sign-up.** The database refuses them (item 23), and Supabase Auth then reports a generic "Database error saving new user". The form stops such names first, so users won't see it.
+    *Default:* accept it.
 
-7. **Phase 3 leftovers.** `subscription_plans`, `subscription_events`, the `payment-webhook` stub and `private.process_subscription_payment` exist in production. The function writes subscription columns that this build removes.
-   *Default:* keep the two tables and the stub untouched; drop the function (Phase 3 will design payments anew). Copy the existing plan and payment IDs into nullable `subscriptions` columns, so nothing is lost.
+31. **TOTP on staging.** The admin tests enrol an authenticator factor, so TOTP MFA must be enabled on the staging project (it is on by default for new projects).
+    *Default:* the runner reports a clear error if it isn't.
 
-8. **Bid status values.** The PRD adds `bids.status` without listing the values.
-   *Default:* `submitted`, then `awarded` or `unsuccessful`, set only by the award and cancel functions.
+## Resolved (Tevin, 13 November 2026)
 
-9. **Upload quota.** Fixing M4 needs a limit; the PRD doesn't give one.
-   *Default:* 20 uploads per person per day, per bucket.
-
-10. **Grants on `storage.objects`.** Supabase itself grants `anon` and `authenticated` everything on this table, including TRUNCATE, REFERENCES, TRIGGER and MAINTAIN, which PRD 8.2 rules out "anywhere". It's owned by Supabase's storage role, so our migrations may not be allowed to revoke them.
-    *Default:* try the revoke on staging. If Supabase refuses it, document it as a platform exception (RLS still applies to every row).
-
-11. **Storage path scheme.** PRD 8.5 wants paths namespaced by tender and bid ID.
-    *Default:* `tender-documents/{tender_id}/{file}` and `bid-documents/{tender_id}/{bid_id}/{file}`. The browser picks the bid ID before uploading, and `submit_bid` uses the same ID. Existing files stay at their old `{user_id}/...` paths, with read rules that cover them.
-
-12. **Contact email for expired trials** (PRD section 13, item 10). I need the address, and a place to set it.
-    *Default:* a build setting `VITE_SUPPORT_EMAIL`, set to `support@caribbeantender.com` until you confirm. The site's top bar still says `support@example.com` and will use the same setting.
-
-## Needed before Stages 3 to 5
-
-13. **Rendering the Markdown pages.** About, Privacy and Terms are stored as Markdown files, which need a renderer. The PRD doesn't name one.
-    *Default:* ask you to approve `marked` (small, no other dependencies). Otherwise I'll write a minimal renderer for headings, paragraphs, lists and links.
-
-14. **PDF library and where PDFs are made.** The PRD allows pdf-lib or @react-pdf/renderer.
-    *Default:* pdf-lib, generated in the browser from the saved form data, stored at `pdf_path`, and immutable once attached. The saved data is the record; the PDF is a rendering of it.
-
-15. **Sentry.** This needs a Sentry project and DSN, in the client's account or yours.
-    *Default:* wire it up with the DSN read from configuration, so it does nothing until a DSN is set.
-
-16. **Lint tool.** The PRD's CI runs lint but doesn't name a tool.
-    *Default:* ask you to approve ESLint with typescript-eslint and the React Hooks plugin.
-
-## Rules where the PRD and the branch differ (I'll follow the PRD)
-
-17. **When bids open.** The branch waits for the tender to be closed (within a minute of `closes_at`, or when the business closes it). The PRD opens bids at `closes_at` and logs the business's first view as "bids opened".
-    *Default:* follow the PRD. Reads go through a function that logs the first view, and the manual "Open the bids" button goes.
-
-18. **Who can see company names.** The branch shows business names to visitors and hides supplier names until bids open. The PRD says signed-in users only.
-    *Default:* every signed-in user can read every company name (name and ID only). A name alone doesn't show who bid on what.
-
-19. **Admins and bids after closing.** PRD P1-15 hides bid contents from admins "before closing" and is silent about after.
-    *Default:* admins never see bid amounts, forms or files in Phase 1.
-
-20. **Cancelling.** PRD P1-07 lets the business cancel an open tender, and its status list allows `closed → cancelled`.
-    *Default:* cancel from `open` or `closed`, with a reason. Drafts are deleted, not cancelled.
-
-21. **Deactivating a user.** P1-15 asks for deactivate and reactivate, without saying how it's enforced.
-    *Default:* the admin function sets `profiles.is_active` and an Edge Function bans the Auth user, which blocks sign-in and token refresh. Existing sessions end when their access token expires (1 hour by default).
-
-22. **Terms acceptance for existing users.** `accepted_terms_at` is new.
-    *Default:* recorded at sign-up from the required checkbox; left empty for existing users and dashboard-created users. Asking existing users to accept on their next sign-in isn't in the PRD, so I won't build it.
-
-23. **Name length on the form.** The P1-01 AC says sign-up works with any name length, but the form requires 2 to 120 characters.
-    *Default:* the form accepts any non-blank name; the database keeps the first 120 characters.
-
-## Schedule
-
-24. **Phase 1 by 23 November.** That's 10 days for Stages 1 to 5, and the client's forms, legal text and categories haven't arrived.
-    *Default:* build in the order Stage 1 → 3 → 2 → 4 → 5, and tell you early if onboarding or the forms engine won't make the date.
+| # | Question | Decision |
+|---|---|---|
+| 1 | Test environments | Docker is running. Use the local Supabase stack for development and for the sign-up confirmation test (local mail catcher). Run the RLS suite on **both** the local stack and staging. |
+| 2 | PGlite | Keep as a quick pre-check. Staging stays the proof. |
+| 3 | Staging vs production | Compare staging with the production values recorded in `AUDIT.md`. Record staging's versions with each test run. |
+| 4 | Secret key in tests | Approved: the **staging** secret key, only in `.env.staging.local`, never committed, never in browser code. |
+| 5 | Supplier category | A single `category_id` on `supplier_profiles`, filled from `industry_category`; `categories` seeded with the 6 legacy categories, marked as a draft list. |
+| 6 | Bidding on your own tender | Keep refusing it. |
+| 7 | Phase 3 leftovers | Drop `private.process_subscription_payment`. Keep `subscription_plans` and `subscription_events`. Copy plan and payment IDs into nullable `subscriptions` columns. Check, from the repo only, whether the `payment-webhook` stub is deployed, and add a `DEPLOY.md` step to delete it from production so no public endpoint can write to subscriptions. |
+| 8 | Bid status | `submitted` → `awarded` or `unsuccessful`, set by the award function. Cancelling a tender sets `tender_cancelled`, never `unsuccessful`. |
+| 9 | Upload quota | 20 uploads per person per day, per bucket. |
+| 10 | `storage.objects` grants | Try the revoke on staging. If Supabase refuses it, document it as a platform exception. |
+| 11 | Storage paths | `tender-documents/{tender_id}/…` and `bid-documents/{tender_id}/{bid_id}/…`, with two checks: `submit_bid` verifies that every file under the bid's path was uploaded by the caller, and no uploads to a bid's path are allowed once the bid is submitted. |
+| 12 | Support email | `VITE_SUPPORT_EMAIL`, set to `support@caribbeantender.com`, replacing `support@example.com` everywhere. Tevin confirms the address with the client. |
+| 13 | Markdown | `react-markdown` (no raw HTML without a plugin, so no `innerHTML`). |
+| 14 | PDFs | pdf-lib, generated from the saved form data **at download time**, never stored. `pdf_path` is dropped. |
+| 15 | Sentry | Wired to a DSN from configuration; does nothing until a DSN is set. |
+| 16 | Lint | ESLint with typescript-eslint and the React Hooks plugin. |
+| 17 | When bids open | Follow the PRD: readable from `closes_at`, through a function that logs the business's first view as "bids opened". |
+| 18 | Company names | Every signed-in user can read every company name (name and ID only). |
+| 19 | Admins and bids | No bid contents for admins in Phase 1. **Phase 2 note:** staff will need to view a bid after closing when it's part of a dispute. |
+| 20 | Cancelling | From `open` or `closed`, with a reason. Drafts are deleted, not cancelled. |
+| 21 | Deactivation | `profiles.is_active`, plus an Auth ban from an Edge Function. **Every write function** (`submit_bid`, publish, extend, cancel, award) also checks `is_active`, so a deactivated user can't act while their token is still valid. |
+| 22 | Terms acceptance | Recorded at sign-up; empty for existing and dashboard-created users; no re-prompt. |
+| 23 | Name length | 1 to 120 characters. The form shows the limit and the database enforces it with a constraint. No silent truncation. |
+| 24 | Schedule | Build order 1 → 3 → 2 → 4 → 5. On **19 November**, report whether the forms engine and onboarding will make 23 November. |
