@@ -107,6 +107,63 @@ create trigger bids_cannot_be_truncated
 before truncate on public.bids
 for each statement execute function private.guard_bid_changes();
 
+-- The bidding rules, in one place: submit_bid and the bid-documents upload policy both call this, so
+-- a rule can never apply to one and not the other (OPEN_QUESTIONS.md, Part B decision 2). Returns why
+-- the signed-in caller may not bid (or upload) for this bid on this tender, or null when they may.
+create function private.bid_refusal_reason(tender_id uuid, bid_id uuid) returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  caller_id uuid := auth.uid();
+  tender_status public.tender_status;
+  tender_closes_at timestamptz;
+  tender_business_id uuid;
+begin
+  if caller_id is null then
+    return 'Sign in to do this.';
+  end if;
+  if not private.caller_is_active() then
+    return 'This account has been deactivated. Contact CaribbeanTender for help.';
+  end if;
+  if bid_refusal_reason.bid_id is null then
+    return 'A bid reference is required.';
+  end if;
+  if not exists (select 1 from public.supplier_profiles supplier where supplier.user_id = caller_id) then
+    return 'Create a supplier account before bidding.';
+  end if;
+
+  select tender.status, tender.closes_at, tender.business_id
+  into tender_status, tender_closes_at, tender_business_id
+  from public.tenders tender where tender.id = bid_refusal_reason.tender_id;
+  if not found then
+    return 'Tender not found.';
+  end if;
+  if tender_status <> 'open' then
+    return 'This tender is not open for bids.';
+  end if;
+  -- clock_timestamp, not now(): the deadline is checked at the moment of the request.
+  if tender_closes_at <= clock_timestamp() then
+    return format('This tender closed at %s Jamaica time.', to_char(tender_closes_at at time zone 'America/Jamaica', 'DD Mon YYYY HH24:MI:SS'));
+  end if;
+  if tender_business_id = caller_id then
+    return 'A business cannot bid on its own tender.';
+  end if;
+  if not private.supplier_has_access(caller_id) then
+    return 'Your free trial has ended, so you cannot submit bids. Contact CaribbeanTender to continue.';
+  end if;
+  if exists (select 1 from public.bids bid where bid.tender_id = bid_refusal_reason.tender_id and bid.supplier_id = caller_id) then
+    return 'You have already submitted a bid for this tender. Bids cannot be changed.';
+  end if;
+  if exists (select 1 from public.bids bid where bid.id = bid_refusal_reason.bid_id) then
+    return 'This bid reference is already used. Reload the page and try again.';
+  end if;
+  return null;
+end;
+$function$;
+
 -- Submits a sealed bid and returns the exact submission time (PRD P1-08). The proposal is either a
 -- filled-in supplier form (proposal_form_submission_id) or a file under the bid's proposal/ folder.
 create function public.submit_bid(
@@ -125,56 +182,24 @@ declare
   submission_moment timestamptz := clock_timestamp();
   bid_folder text := submit_bid.tender_id::text || '/' || submit_bid.bid_id::text || '/';
   proposal_folder text := submit_bid.tender_id::text || '/' || submit_bid.bid_id::text || '/proposal/';
-  tender_status public.tender_status;
-  tender_closes_at timestamptz;
-  tender_business_id uuid;
+  refusal text;
   stored_file record;
   has_proposal_file boolean := false;
   proposal_schema jsonb;
   proposal_data jsonb;
   problems text[];
 begin
-  if submit_bid.bid_id is null then
-    raise exception 'A bid reference is required.' using errcode = 'check_violation';
-  end if;
   if submit_bid.amount is null or submit_bid.amount <= 0 or submit_bid.amount >= maximum_amount
      or submit_bid.amount <> round(submit_bid.amount, 2) then
     raise exception 'Enter a bid amount above zero, with at most two decimal places.' using errcode = 'check_violation';
   end if;
-  if not exists (select 1 from public.supplier_profiles supplier where supplier.user_id = caller_id) then
-    raise exception 'Create a supplier account before bidding.' using errcode = 'insufficient_privilege';
-  end if;
 
-  -- The share lock stops the tender being closed or cancelled between these checks and the insert.
-  select tender.status, tender.closes_at, tender.business_id
-  into tender_status, tender_closes_at, tender_business_id
-  from public.tenders tender where tender.id = submit_bid.tender_id
-  for share;
+  -- The share lock stops the tender being closed or cancelled between the rule check and the insert.
+  perform 1 from public.tenders tender where tender.id = submit_bid.tender_id for share;
 
-  if not found then
-    raise exception 'Tender not found.' using errcode = 'no_data_found';
-  end if;
-  if tender_status <> 'open' then
-    raise exception 'This tender is not open for bids.' using errcode = 'check_violation';
-  end if;
-  -- clock_timestamp, not now(): the deadline is checked at the moment of submission.
-  if tender_closes_at <= submission_moment then
-    raise exception 'This tender closed at % Jamaica time.',
-      to_char(tender_closes_at at time zone 'America/Jamaica', 'DD Mon YYYY HH24:MI:SS')
-      using errcode = 'check_violation';
-  end if;
-  if tender_business_id = caller_id then
-    raise exception 'A business cannot bid on its own tender.' using errcode = 'check_violation';
-  end if;
-  if not private.supplier_has_access(caller_id) then
-    raise exception 'Your free trial has ended, so you cannot submit bids. Contact CaribbeanTender to continue.'
-      using errcode = 'insufficient_privilege';
-  end if;
-  if exists (select 1 from public.bids bid where bid.tender_id = submit_bid.tender_id and bid.supplier_id = caller_id) then
-    raise exception 'You have already submitted a bid for this tender. Bids cannot be changed.' using errcode = 'unique_violation';
-  end if;
-  if exists (select 1 from public.bids bid where bid.id = submit_bid.bid_id) then
-    raise exception 'This bid reference is already used. Reload the page and try again.' using errcode = 'unique_violation';
+  refusal := private.bid_refusal_reason(submit_bid.tender_id, submit_bid.bid_id);
+  if refusal is not null then
+    raise exception '%', refusal using errcode = 'check_violation';
   end if;
 
   insert into public.bids (id, tender_id, supplier_id, amount, currency, submitted_at, status, created_at, updated_at)
@@ -322,6 +347,9 @@ $$;
 revoke insert, update, delete, truncate on public.bids from anon, authenticated;
 
 revoke all on function private.supplier_has_access(uuid) from public, anon, authenticated;
+revoke all on function private.bid_refusal_reason(uuid, uuid) from public, anon, authenticated;
+-- The upload policy calls it as the querying role.
+grant execute on function private.bid_refusal_reason(uuid, uuid) to authenticated;
 revoke all on function private.guard_bid_changes() from public, anon, authenticated;
 revoke all on function private.cancel_tender_now(uuid, text) from public, anon, authenticated;
 revoke all on function public.submit_bid(uuid, uuid, numeric, uuid) from public, anon, authenticated;

@@ -25,17 +25,18 @@ create table public.subscriptions (
 comment on table public.subscriptions is
   'Supplier trial and subscription state, one row per person, kept even if the supplier profile is deleted. Written only by the service role and admin functions.';
 
--- Existing values are copied unchanged (PRD section 7). A status this migration does not know
--- stops it, rather than being guessed at; DEPLOY.md runs a read-only check for this first.
+-- Existing values are copied unchanged (PRD section 7). An empty status belongs to suppliers created
+-- before trials existed, who have no access today; they become expired, so nobody gains or loses
+-- access (OPEN_QUESTIONS.md, decision D2). Any other status this migration does not know stops it,
+-- rather than being guessed at; DEPLOY.md runs a read-only check for this first.
 do $$
 declare
   unexpected_statuses text;
 begin
-  select string_agg(distinct coalesce(supplier.subscription_status, '(empty)'), ', ')
+  select string_agg(distinct supplier.subscription_status, ', ')
   into unexpected_statuses
   from public.supplier_profiles supplier
-  where supplier.subscription_status is null
-     or supplier.subscription_status not in ('trial', 'active', 'expired', 'cancelled');
+  where supplier.subscription_status not in ('trial', 'active', 'expired', 'cancelled');
 
   if unexpected_statuses is not null then
     raise exception 'supplier_profiles has subscription statuses this migration cannot copy unchanged: %. Decide how to map them before cutover (DEPLOY.md, pre-checks).', unexpected_statuses;
@@ -49,7 +50,7 @@ insert into public.subscriptions (
 )
 select
   supplier.user_id,
-  supplier.subscription_status::public.subscription_status,
+  coalesce(supplier.subscription_status, 'expired')::public.subscription_status,
   supplier.trial_started_at,
   supplier.trial_ends_at,
   supplier.subscription_ends_at,

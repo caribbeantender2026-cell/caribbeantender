@@ -7,7 +7,9 @@
 --   bid-documents/{tender_id}/{bid_id}/proposal/{file}      a bid's uploaded proposal
 --
 -- Uploads: only into your own draft's folder, or into the folder of a bid you haven't submitted yet,
--- on an open tender you may bid on. Once a bid exists, nothing more can be uploaded to its folder.
+-- on an open tender you may bid on. Bid uploads use the same rule function as submit_bid
+-- (private.bid_refusal_reason), so the two can never drift apart. Once a bid exists, nothing more can
+-- be uploaded to its folder.
 -- At most 20 uploads per person per day, per bucket.
 --
 -- Write-once: nobody updates or deletes a file once its draft is published or its bid submitted.
@@ -87,31 +89,6 @@ as $$
   );
 $$;
 
--- Whether the caller may upload into this bid folder: the same tests submit_bid will apply,
--- plus "no bid with this id exists yet" (OPEN_QUESTIONS.md, item 11).
-create function private.can_upload_to_bid_folder(tender_folder text, bid_folder text) returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select private.try_uuid(bid_folder) is not null
-    and exists (
-      select 1 from public.tenders tender
-      where tender.id = private.try_uuid(tender_folder)
-        and tender.status = 'open'
-        and tender.closes_at > clock_timestamp()
-        and tender.business_id <> (select auth.uid())
-    )
-    and exists (select 1 from public.supplier_profiles supplier where supplier.user_id = (select auth.uid()))
-    and private.supplier_has_access((select auth.uid()))
-    and not exists (select 1 from public.bids bid where bid.id = private.try_uuid(bid_folder))
-    and not exists (
-      select 1 from public.bids bid
-      where bid.tender_id = private.try_uuid(tender_folder) and bid.supplier_id = (select auth.uid())
-    );
-$$;
-
 -- Whether a bid folder is the caller's and its bid hasn't been submitted (files can still be removed).
 create function private.is_own_unsubmitted_bid_folder(bid_folder text) returns boolean
 language sql
@@ -156,8 +133,7 @@ create policy bid_documents_upload_before_submission on storage.objects
 for insert to authenticated
 with check (
   bucket_id = 'bid-documents'
-  and (select private.caller_is_active())
-  and private.can_upload_to_bid_folder((storage.foldername(name))[1], (storage.foldername(name))[2])
+  and private.bid_refusal_reason(private.try_uuid((storage.foldername(name))[1]), private.try_uuid((storage.foldername(name))[2])) is null
   and (
     cardinality(storage.foldername(name)) = 2
     or (cardinality(storage.foldername(name)) = 3 and (storage.foldername(name))[3] = 'proposal')
@@ -246,11 +222,10 @@ $$;
 
 revoke all on function private.uploads_in_last_day(text) from public, anon, authenticated;
 revoke all on function private.is_own_draft_tender_folder(text) from public, anon, authenticated;
-revoke all on function private.can_upload_to_bid_folder(text, text) from public, anon, authenticated;
 revoke all on function private.is_own_unsubmitted_bid_folder(text) from public, anon, authenticated;
 revoke all on function public.request_document_download(uuid) from public, anon, authenticated;
 grant execute on function private.uploads_in_last_day(text) to authenticated;
 grant execute on function private.is_own_draft_tender_folder(text) to authenticated;
-grant execute on function private.can_upload_to_bid_folder(text, text) to authenticated;
+grant execute on function private.try_uuid(text) to authenticated;
 grant execute on function private.is_own_unsubmitted_bid_folder(text) to authenticated;
 grant execute on function public.request_document_download(uuid) to authenticated;

@@ -13,6 +13,7 @@ import {
   createAdmin,
   expireTrial,
   fileOf,
+  runIdentifier,
   sleep,
   supabaseUrl,
   waitUntilPast,
@@ -232,7 +233,7 @@ describe(`RLS suite (${supabaseUrl})`, () => {
     const short = await adminClient.from('profiles').select('full_name').eq('id', expiredSupplier.userId).single();
     assert.equal(short.data?.full_name, 'X');
     const tooLong = await adminClient.auth.admin.createUser({
-      email: `ct-rls-${randomUUID()}@example.com`,
+      email: `rls-test-${runIdentifier}-${randomUUID()}@example.com`,
       password: `Rls-${randomUUID()}`,
       email_confirm: true,
       user_metadata: { full_name: 'N'.repeat(121), account_type: 'supplier' },
@@ -243,8 +244,11 @@ describe(`RLS suite (${supabaseUrl})`, () => {
   test('P1-06: a published tender only takes a later closing time; its terms are fixed', async () => {
     const edited = await otherBusiness.client.from('tenders').update({ title: 'Changed' }).eq('id', cronTender.id).select('id');
     assert.deepEqual(edited.data ?? [], []);
-    const shortened = await otherBusiness.client.rpc('extend_tender_closing_time', { tender_id: cronTender.id, new_closes_at: new Date(Date.now() + 5000).toISOString() });
-    assert.ok(shortened.error);
+    // Relative to its own closing time, not the clock: against a remote project "now + a few seconds" can
+    // already be later than this short-lived tender's closing time, which is a valid extension.
+    const earlier = new Date(cronTender.closesAt.getTime() - 1000).toISOString();
+    const shortened = await otherBusiness.client.rpc('extend_tender_closing_time', { tender_id: cronTender.id, new_closes_at: earlier });
+    assert.match(shortened.error?.message ?? '', /only be extended|Only an open tender/);
     const status = await otherBusiness.client.from('tenders').update({ status: 'closed' }).eq('id', cronTender.id);
     assert.ok(status.error, '8.4: no direct status writes');
   });
@@ -368,15 +372,35 @@ describe('Role and table matrix', () => {
   ];
   const noDirectWrites = new Set(['company_names', 'categories', 'tender_documents', 'bids', 'bid_documents', 'form_definitions', 'subscriptions', 'subscription_plans', 'subscription_events', 'staff_members', 'audit_log', 'email_log']);
 
-  async function attemptWrites(client: SupabaseClient, table: string): Promise<string[]> {
-    const accepted: string[] = [];
-    const inserted = await client.from(table).insert({}).select();
-    if (!inserted.error) accepted.push('insert');
-    const updated = await client.from(table).update({ created_at: new Date().toISOString() }).not('created_at', 'is', null).select();
-    if (!updated.error && (updated.data ?? []).length > 0) accepted.push('update');
-    const deleted = await client.from(table).delete({ count: 'exact' }).not('created_at', 'is', null);
-    if (!deleted.error && (deleted.count ?? 0) > 0) accepted.push('delete');
-    return accepted;
+  // Each table's key, and a value no row can have. Write attempts target only that impossible row, so the
+  // checks can never change real data (OPEN_QUESTIONS.md, decision D1); the proof is the error itself.
+  const impossibleRow: Record<string, [string, string | number]> = {
+    profiles: ['id', randomUUID()], business_profiles: ['user_id', randomUUID()], supplier_profiles: ['user_id', randomUUID()],
+    company_names: ['user_id', randomUUID()], categories: ['id', -1], tenders: ['id', randomUUID()],
+    tender_documents: ['id', randomUUID()], bids: ['id', randomUUID()], bid_documents: ['id', randomUUID()],
+    form_definitions: ['key', 'no-such-form'], form_submissions: ['id', randomUUID()], subscriptions: ['supplier_id', randomUUID()],
+    subscription_plans: ['id', randomUUID()], subscription_events: ['id', randomUUID()], notification_preferences: ['user_id', randomUUID()],
+    staff_members: ['user_id', randomUUID()], audit_log: ['id', -1], email_log: ['id', -1],
+  };
+  // An identity key refuses any written value before privileges are checked (428C9), which would hide the
+  // answer. These tables write a NOT NULL column as null instead: refused for privilege or by the
+  // constraint, never stored.
+  const notNullColumnWrittenAsNull: Record<string, string> = { categories: 'name', audit_log: 'action', email_log: 'type' };
+  const permissionDenied = '42501';
+
+  /** Writes that were NOT refused for lack of privilege (there should be none). */
+  async function writesNotRefused(client: SupabaseClient, table: string): Promise<string[]> {
+    const [keyColumn, impossibleValue] = impossibleRow[table] ?? ['id', randomUUID()];
+    const writeColumn = notNullColumnWrittenAsNull[table];
+    const written: Record<string, string | number | null> = writeColumn ? { [writeColumn]: null } : { [keyColumn]: impossibleValue };
+    const attempts = {
+      insert: await client.from(table).insert([written]),
+      update: await client.from(table).update(written).eq(keyColumn, impossibleValue),
+      delete: await client.from(table).delete().eq(keyColumn, impossibleValue),
+    };
+    return Object.entries(attempts)
+      .filter(([, outcome]) => outcome.error?.code !== permissionDenied)
+      .map(([operation, outcome]) => `${operation} ${table} (${outcome.error?.code ?? 'no error'})`);
   }
 
   test('Visitors who are not signed in can read and write no table', async () => {
@@ -385,7 +409,7 @@ describe('Role and table matrix', () => {
     for (const table of tables) {
       const read = await visitor.from(table).select('*').limit(1);
       if (!read.error && (read.data ?? []).length > 0) reachable.push(`read ${table}`);
-      for (const write of await attemptWrites(visitor, table)) reachable.push(`${write} ${table}`);
+      reachable.push(...(await writesNotRefused(visitor, table)));
     }
     assert.deepEqual(reachable, []);
   });
@@ -394,7 +418,7 @@ describe('Role and table matrix', () => {
     for (const account of [business, supplier]) {
       const accepted: string[] = [];
       for (const table of noDirectWrites) {
-        for (const write of await attemptWrites(account.client, table)) accepted.push(`${write} ${table}`);
+        accepted.push(...(await writesNotRefused(account.client, table)));
       }
       assert.deepEqual(accepted, [], account.email);
     }

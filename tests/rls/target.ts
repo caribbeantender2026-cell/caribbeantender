@@ -1,7 +1,9 @@
 /**
  * The real Supabase stack the RLS suite runs against (the local stack or staging), and the test
  * accounts it uses. This drives the real API, Storage, Auth and pg_cron, which the PGlite pre-check
- * in tests/database cannot. It refuses to run against the production project.
+ * in tests/database cannot. Against the client's project it runs only when the runner says so, and only
+ * the after-state suite (OPEN_QUESTIONS.md, decision D1): every account it creates is named
+ * rls-test-<run id>-..., created already confirmed (no email), and removed by scripts/cleanup-rls-test-data.ts.
  */
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
@@ -23,9 +25,10 @@ export const supabaseUrl = requireSetting('RLS_SUPABASE_URL');
 const publishableKey = requireSetting('RLS_PUBLISHABLE_KEY');
 const secretKey = requireSetting('RLS_SECRET_KEY');
 
-// The suite creates users, uploads files and deletes data. It must never touch production.
-if (supabaseUrl.includes(productionProjectRef)) {
-  throw new Error('Refusing to run: RLS_SUPABASE_URL points at the production project.');
+/** True when running against the client's project (only the after-state suite may do that). */
+export const isClientProject = supabaseUrl.includes(productionProjectRef);
+if (isClientProject && process.env.RLS_LIVE_PROJECT !== 'after-state-only') {
+  throw new Error('Refusing to run against the client project unless scripts/run-rls.ts live sets RLS_LIVE_PROJECT=after-state-only.');
 }
 
 const clientOptions = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -40,7 +43,8 @@ export function anonymousClient(): SupabaseClient {
 
 export type TestAccount = { client: SupabaseClient; userId: string; email: string };
 
-const runIdentifier = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+/** Ties every account in a run together, so cleanup removes exactly what this run created. */
+export const runIdentifier = process.env.RLS_RUN_ID ?? new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
 const testPassword = `Rls-${randomUUID()}`;
 
 /**
@@ -48,7 +52,7 @@ const testPassword = `Rls-${randomUUID()}`;
  * as in production. The signup trigger runs exactly as for a real sign-up.
  */
 export async function createAccount(label: string, accountType: 'business' | 'supplier', fullName = `Test ${label}`): Promise<TestAccount> {
-  const email = `ct-rls-${runIdentifier}-${label}@example.com`;
+  const email = `rls-test-${runIdentifier}-${label}@example.com`;
   const created = await adminClient.auth.admin.createUser({
     email,
     password: testPassword,

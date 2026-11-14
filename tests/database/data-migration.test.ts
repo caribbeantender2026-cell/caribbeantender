@@ -14,6 +14,7 @@ let database: PGlite;
 const businessId = randomUUID();
 const trialSupplierId = randomUUID();
 const paidSupplierId = randomUUID();
+const statuslessSupplierId = randomUUID();
 const futureTenderId = randomUUID();
 const pastTenderId = randomUUID();
 const cancelledTenderId = randomUUID();
@@ -47,6 +48,9 @@ before(async () => {
   await signUp(businessId, 'business', 'Existing Business Ltd');
   await signUp(trialSupplierId, 'supplier', 'Trial Supplier Ltd');
   await signUp(paidSupplierId, 'supplier', 'Paid Supplier Ltd');
+  // Like the four production suppliers created before trials existed.
+  await signUp(statuslessSupplierId, 'supplier', 'Early Supplier Ltd');
+  await database.query(`update public.supplier_profiles set subscription_status = null, trial_started_at = null, trial_ends_at = null where user_id = $1`, [statuslessSupplierId]);
   await database.query(`update public.supplier_profiles set industry_category = 'Works' where user_id = $1`, [trialSupplierId]);
   await database.query(
     `update public.supplier_profiles
@@ -137,9 +141,17 @@ test("Q5: a supplier's free-text category becomes its category id", async () => 
   assert.deepEqual(category.rows, [{ name: 'Works' }]);
 });
 
+test('D2: a supplier with no subscription status becomes expired, keeping no access', async () => {
+  const result = await database.query<{ status: string; has_access: boolean }>(
+    `select status::text as status, private.supplier_has_access(supplier_id) as has_access from public.subscriptions where supplier_id = $1`,
+    [statuslessSupplierId],
+  );
+  assert.deepEqual(result.rows, [{ status: 'expired', has_access: false }]);
+});
+
 test('Company names are carried over for every business and supplier', async () => {
   const result = await database.query<{ company_name: string }>(`select company_name from public.company_names order by company_name`);
-  assert.deepEqual(result.rows.map((row) => row.company_name), ['Existing Business Ltd', 'Paid Supplier Ltd', 'Trial Supplier Ltd']);
+  assert.deepEqual(result.rows.map((row) => row.company_name), ['Early Supplier Ltd', 'Existing Business Ltd', 'Paid Supplier Ltd', 'Trial Supplier Ltd']);
 });
 
 test('Existing documents become document rows and keep their files and paths', async () => {

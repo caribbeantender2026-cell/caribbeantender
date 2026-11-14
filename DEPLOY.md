@@ -2,9 +2,20 @@
 
 **Status:** draft, started in Stage 1 with the steps the database work creates. Stage 5 completes it (Edge Functions and secrets, Auth email templates, Resend DNS, hosting and domain, smoke tests).
 
-**Who runs it:** Tevin only, by hand. The coding agent never runs any of it (PRD hard rule 1).
+**Who runs it:** decision D1 in OPEN_QUESTIONS.md replaced PRD hard rule 1. The coding agent works directly on the client project, which isn't live yet. Steps 1 to 5 were run on 2026-11-13 (see "Done on 2026-11-13" below). Step 6 needs the client's Owner or Administrator, because Tevin's Developer role can't change Auth or project settings.
 
-**When:** in one cutover with the new frontend. These migrations change what the current static site relies on (PRD section 7).
+**The current static site:** it no longer works against the migrated database (PRD section 7). The new frontend replaces it at cutover.
+
+## Done on 2026-11-13
+
+| Step | Result |
+|---|---|
+| 1. Backup | Every public table, the auth users (id, email, created_at, metadata) and the list of stored files exported as JSON to `backups/2026-11-13/` (gitignored, kept on Tevin's machine). Supabase's own daily backup is the restore point. |
+| 2. Pre-checks | Every check passed. 4 suppliers had no subscription status; they became `expired` (OPEN_QUESTIONS.md, D2). |
+| 3. C1 fix | Not applied by hand, so `20261005031017` was pushed with the rest. |
+| 4. Migrations | `20261005025300` marked applied; `20261005031017` and `20261005040050` to `20261005041100` applied one at a time, with no failures. |
+| 5. payment-webhook | Deleted; a POST now returns 404. |
+| Checks after | Security Advisor: 0 errors, 13 warnings (12 intended signed-in remote procedures, plus leaked-password protection off), 1 info. The RLS suite passed 26 of 26 against the project (`tests/rls/runs/2026-11-14T03-31-02-116Z-live.md`); its `rls-test-<run id>` accounts, rows and files were removed, and every existing table's row count matches the backup. |
 
 ## 1. Backup
 
@@ -22,7 +33,8 @@ Run each query in the production **SQL Editor**. Each must return the stated res
 
 | Check | Query | Must return |
 |---|---|---|
-| Subscription statuses the migration can copy unchanged | `select subscription_status, count(*) from public.supplier_profiles group by 1;` | Only `trial`, `active`, `expired` or `cancelled`. Anything else (including empty, or `canceled`) needs a decision first. |
+| Subscription statuses the migration can copy unchanged | `select subscription_status, count(*) from public.supplier_profiles group by 1;` | Only `trial`, `active`, `expired`, `cancelled` or empty. Empty becomes `expired` (OPEN_QUESTIONS.md, D2); anything else (such as `canceled`) needs a decision first. |
+| Suppliers active with no end date, to review | `select supplier.user_id, supplier.company_name, supplier.contact_email, supplier.subscription_started_at, supplier.updated_at from public.supplier_profiles supplier where supplier.subscription_status = 'active' and supplier.subscription_ends_at is null order by supplier.updated_at;` | Review every row. They keep access after the cutover (no end date counts as active), and a supplier may have given themselves access through the October holes (AUDIT.md C1). |
 | No two bids share a file | `select document_path, count(*) from public.bids group by 1 having count(*) > 1;` | No rows |
 | No two tenders share a file | `select document_path, count(*) from public.tenders where document_path is not null group by 1 having count(*) > 1;` | No rows |
 | Names fit 1 to 120 characters | `select id from public.profiles where char_length(btrim(full_name)) not between 1 and 120;` | No rows |
@@ -58,17 +70,26 @@ supabase unlink
    curl.exe -s -o NUL -w "%{http_code}" -X POST https://<production ref>.supabase.co/functions/v1/payment-webhook
    ```
 
-## 6. Auth settings
+## 6. Settings the client's Owner or Administrator must set
 
-| Setting | Value | Why |
-|---|---|---|
-| Site URL | `https://caribbeantender.com` | It was set to the Railway demo URL (`https://caribbeantender-production.up.railway.app/`) on 2026-10-07 for a presentation. |
-| Redirect URLs | `https://caribbeantender.com/**` | Confirmation and reset links. Remove the Railway demo address. |
-| Email confirmation | On | PRD P1-01 |
-| Minimum password length | 8 | Matches the sign-up form |
-| Leaked-password protection | On (Pro plan) | AUDIT.md M8 |
-| MFA, authenticator app (TOTP) | Enabled | Admins (PRD P1-15, 8.6) |
-| Custom SMTP | Resend (Stage 5 adds the details) | PRD P1-01 |
+Tevin's Developer role can't change these. "Now" is what the project showed on 2026-11-13, where it could be read.
+
+| # | Where in the dashboard | Setting | Value | Now | Why |
+|---|---|---|---|---|---|
+| 1 | Organization → Billing | Plan | **Pro**, in the business's name, with Tevin as Administrator | Unknown | PRD 9.3 and 13.5. Free projects pause after a week without activity, and leaked-password protection needs Pro. |
+| 2 | Authentication → Emails → SMTP Settings | Custom SMTP | Host `smtp.resend.com`, port `465`, username `resend`, password: a Resend API key with sending access only; sender `no-reply@caribbeantender.com`, name `CaribbeanTender` | Built-in sender | PRD P1-01. The built-in sender only reaches the project's team members, about 2 emails an hour, so real users would get no confirmation or reset emails. Needs the Resend domain verified first (SPF and DKIM on caribbeantender.com; Stage 5). |
+| 3 | Authentication → Rate Limits | Emails sent per hour | At least 30 (the default once custom SMTP is on); raise it before launch announcements | Unknown | Sign-up and reset emails share this limit. |
+| 4 | Authentication → URL Configuration | Site URL | `https://caribbeantender.com` | Railway demo URL, set 2026-10-07 | Links in Auth emails point here. |
+| 5 | Authentication → URL Configuration | Redirect URLs | `https://caribbeantender.com/**`; remove the Railway demo address | Unknown | Confirmation and reset links may only return to these. |
+| 6 | Authentication → Sign In / Providers → Email | Confirm email | On | On | PRD P1-01: an unconfirmed user cannot sign in. |
+| 7 | Authentication → Sign In / Providers → Email | Minimum password length | 8 | Unknown (Supabase's default is 6) | Matches the sign-up form. |
+| 8 | Authentication → Sign In / Providers → Email | Secure email change, secure password change | On | Unknown | A stolen session alone can't take over the account. |
+| 9 | Authentication → Sign In / Providers → Email | Email OTP expiry | 3600 seconds (the default) | Unknown | PRD P1-01: reset links expire. |
+| 10 | Authentication → Attack Protection | Leaked-password protection | On (Pro plan) | Off (Security Advisor warning) | AUDIT.md M8. |
+| 11 | Authentication → Multi-Factor | Authenticator app (TOTP) | Enabled | Enabled (the RLS run enrolled and verified a factor) | Admins need it (PRD P1-15, 8.6). |
+| 12 | Authentication → Sign In / Providers | Allow new users to sign up: on. Anonymous sign-ins: off. Only the Email provider enabled. | As stated | As stated | PRD P1-01. |
+| 13 | Authentication → Emails → Templates | Confirm signup, Reset password, Change email address | Stage 5 supplies the wording | Supabase defaults | PRD 10. |
+| 14 | Project Settings → API Keys | Rotate the secret (`service_role`) key at handover, and later move to the new publishable and secret keys | Recommended | Legacy keys in use | The secret key was copied to Tevin's machine for this work (`.env.production.local`). Rotating it also signs everyone out, so do it at cutover. |
 
 ## 7. First admin
 

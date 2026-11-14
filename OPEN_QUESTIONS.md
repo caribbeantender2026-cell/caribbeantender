@@ -7,7 +7,7 @@ Last updated: 13 November 2026 (Stage 1).
 ## Open
 
 25. **Is the requirements form required to publish?** PRD P1-06 lists it among a tender's fields.
-    *Default:* yes. `publish_tender` refuses a draft without one, filled in online or uploaded under `requirements-form/`. Say if it should be optional while the client's real forms are missing.
+    *Resolved (Tevin, 13 November 2026):* yes. `publish_tender` refuses a draft without one, filled in online or uploaded under `requirements-form/`.
 
 26. **Awarding straight after the deadline.** `award_tender` needs the status `closed`, which the scheduled job sets within a minute of `closes_at`. The business can read the bids from `closes_at`, but must wait up to a minute to award.
     *Default:* keep it; the UI says "closing…" for that minute.
@@ -24,8 +24,20 @@ Last updated: 13 November 2026 (Stage 1).
 30. **Names over 120 characters at sign-up.** The database refuses them (item 23), and Supabase Auth then reports a generic "Database error saving new user". The form stops such names first, so users won't see it.
     *Default:* accept it.
 
-31. **TOTP on staging.** The admin tests enrol an authenticator factor, so TOTP MFA must be enabled on the staging project (it is on by default for new projects).
-    *Default:* the runner reports a clear error if it isn't.
+31. **TOTP on the client's project.** The admin tests enrol an authenticator factor, so TOTP MFA must be enabled.
+    *Answered:* it is. The live run on 13 November 2026 enrolled and verified a factor (`tests/rls/runs/`). The client's owner should keep it on (DEPLOY.md step 6).
+
+## Decisions that change the PRD
+
+- **D1 (Tevin, 13 November 2026): work directly on the client's Supabase project.** No staging and no Docker. Stage 1 is applied to and tested on the client's project (`ijlcjthgwppllhlqocep`), which isn't live yet; Tevin accepts the risk. This **replaces PRD hard rule 1** ("never connect to the production project") and the staging plan (PRD 9.3, OPEN_QUESTIONS items 1, 3 and 4). Limits that still apply on that project:
+  - never reset, drop or recreate the database;
+  - never delete real users, rows or files;
+  - never send email to real users;
+  - never change Auth or project settings (Tevin's Developer role can't; DEPLOY.md lists what the client's owner must set);
+  - back up first;
+  - test accounts are named `rls-test-<run id>`, created already confirmed, and deleted afterwards with all their rows and files.
+
+- **D2 (Tevin, 13 November 2026): suppliers with no subscription status become expired.** Four suppliers on the client's project were created (4 August to 10 September) before trials existed, have no status and no trial dates, and can't bid today. The subscriptions migration copies them as `expired`, so nobody gains or loses access; any other unknown status still stops the migration.
 
 ## Resolved (Tevin, 13 November 2026)
 

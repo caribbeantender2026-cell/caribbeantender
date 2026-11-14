@@ -4,7 +4,12 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { before, describe, test } from 'node:test';
-import { adminClient, anonymousClient, createAccount, fileOf, supabaseUrl, type TestAccount } from './target.ts';
+import { adminClient, anonymousClient, createAccount, fileOf, isClientProject, supabaseUrl, type TestAccount } from './target.ts';
+
+// This suite deletes data through the old holes. It must never run on the client's project.
+if (isClientProject) {
+  throw new Error('The baseline suite never runs against the client project.');
+}
 
 type OpenApiDocument = { paths: Record<string, unknown>; definitions: Record<string, { properties?: Record<string, { format?: string }> }> };
 
@@ -127,7 +132,7 @@ describe('Baseline: every audit item reproduces on the production schema', () =>
 
   test('A7 reproduces: creating a user with a one-letter name fails', async () => {
     const created = await adminClient.auth.admin.createUser({
-      email: `ct-rls-${randomUUID()}@example.com`,
+      email: `rls-test-${randomUUID()}@example.com`,
       password: `Rls-${randomUUID()}`,
       email_confirm: true,
       user_metadata: { full_name: 'Q', account_type: 'supplier' },

@@ -27,3 +27,5 @@ CLAUDE.md
 # Vite build output
 dist/
 PRD.md
+# Local exports of project data (personal data; never committed)
+backups/

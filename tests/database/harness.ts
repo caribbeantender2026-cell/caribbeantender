@@ -315,7 +315,7 @@ export async function setTenderState(
 
 /** Whether the storage migration (tender and bid folder scheme) has been applied. */
 export async function usesNamespacedPaths(database: PGlite): Promise<boolean> {
-  const result = await database.query(`select 1 from pg_proc where proname = 'can_upload_to_bid_folder'`);
+  const result = await database.query(`select 1 from pg_proc where proname = 'is_own_unsubmitted_bid_folder'`);
   return result.rows.length > 0;
 }
 

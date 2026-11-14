@@ -81,7 +81,8 @@ grant execute on function private.caller_is_active() to authenticated;
 grant execute on function private.caller_is_admin() to authenticated;
 grant execute on function private.uploads_in_last_day(text) to authenticated;
 grant execute on function private.is_own_draft_tender_folder(text) to authenticated;
-grant execute on function private.can_upload_to_bid_folder(text, text) to authenticated;
+grant execute on function private.bid_refusal_reason(uuid, uuid) to authenticated;
+grant execute on function private.try_uuid(text) to authenticated;
 grant execute on function private.is_own_unsubmitted_bid_folder(text) to authenticated;
 
 -- The service role (Edge Functions only, PRD 8.7) keeps full access to the tables it maintains.

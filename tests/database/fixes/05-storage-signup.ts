@@ -59,6 +59,54 @@ export const storagePoliciesSuite: FixSuite = {
       },
     },
     {
+      name: 'B2: the bidding rules live in one function, so changing it changes both the upload policy and submit_bid',
+      run: async (database) => {
+        const businessId = await createUser(database, { accountType: 'business' });
+        const supplierId = await createUser(database, { accountType: 'supplier' });
+        const tenderId = await createTender(database, businessId, 'accepting-bids');
+        const bidId = randomUUID();
+        // Both are allowed under the real rules.
+        assertSucceeded(await uploadAs(database, supplierId, 'bid-documents', `${tenderId}/${randomUUID()}/proposal/check.pdf`), 'upload under the real rules');
+
+        const outcomes = await database.transaction(async (transaction) => {
+          // Change the rule once, as a later migration would, then try both paths as the supplier.
+          await transaction.exec(
+            `create or replace function private.bid_refusal_reason(tender_id uuid, bid_id uuid) returns text
+             language sql stable security definer set search_path = '' as $$ select 'Bidding is paused for this test.'::text $$`,
+          );
+          // The supplier's proposal, placed as the database owner as an earlier upload would have.
+          await transaction.query(
+            `insert into storage.objects (bucket_id, name, owner, owner_id, metadata) values ('bid-documents', $1, $2, $3, '{"size": 2048, "mimetype": "application/pdf"}')`,
+            [`${tenderId}/${bidId}/proposal/proposal.pdf`, supplierId, supplierId],
+          );
+          await transaction.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: supplierId, role: 'authenticated', aal: 'aal1' })]);
+          await transaction.exec(`set local role authenticated`);
+          const attempt = async (statement: string, parameters: unknown[]): Promise<string> => {
+            await transaction.exec(`savepoint attempt`);
+            try {
+              await transaction.query(statement, parameters);
+              await transaction.exec(`release savepoint attempt`);
+              return 'allowed';
+            } catch (error) {
+              await transaction.exec(`rollback to savepoint attempt`);
+              return (error as Error).message;
+            }
+          };
+          const upload = await attempt(
+            `insert into storage.objects (bucket_id, name, owner, owner_id) values ('bid-documents', $1, $2, $3)`,
+            [`${tenderId}/${randomUUID()}/proposal/other.pdf`, supplierId, supplierId],
+          );
+          const submission = await attempt(`select public.submit_bid($1, $2, 1000, null)`, [tenderId, bidId]);
+          await transaction.rollback();
+          return { upload, submission };
+        });
+        assert.match(outcomes.upload, /row-level security/, 'the upload policy follows the changed rule');
+        assert.match(outcomes.submission, /paused for this test/, 'submit_bid follows the changed rule');
+        // The rollback restored the real rule.
+        assertSucceeded(await uploadAs(database, supplierId, 'bid-documents', `${tenderId}/${randomUUID()}/proposal/after.pdf`), 'upload after the rollback');
+      },
+    },
+    {
       name: 'A5: both document buckets accept PDF, Word and Excel (.xls and .xlsx), up to 10 MB',
       run: async (database) => {
         const buckets = await database.query<{ id: string; allowed_mime_types: string[]; file_size_limit: number }>(

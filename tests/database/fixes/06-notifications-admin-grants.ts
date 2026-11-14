@@ -249,11 +249,12 @@ export const leastPrivilegeGrantsSuite: FixSuite = {
         );
         const sortedRows = [...result.rows].sort((first, second) => first.function_name.localeCompare(second.function_name));
         assert.deepEqual(sortedRows, [
-          'private.can_upload_to_bid_folder',
+          'private.bid_refusal_reason',
           'private.caller_is_active',
           'private.caller_is_admin',
           'private.is_own_draft_tender_folder',
           'private.is_own_unsubmitted_bid_folder',
+          'private.try_uuid',
           'private.uploads_in_last_day',
           'public.admin_cancel_tender',
           'public.admin_list_tenders',

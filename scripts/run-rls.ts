@@ -1,23 +1,29 @@
 /**
- * Runs the real-stack RLS proof (PRD section 11) against the local Supabase stack or staging:
- *   1. reset the database to the production baseline and run tests/rls/baseline.test.ts
- *      (every audit item must reproduce);
- *   2. apply the remaining migrations and run tests/rls/rls.test.ts (every item must be refused);
- *   3. record the service versions, timezone, Security Advisor results and storage grants, next to
+ * Runs the real-stack RLS proof (PRD section 11) against the local Supabase stack, staging, or the
+ * client's project:
+ *   1. local and staging only: reset the database to the production baseline and run
+ *      tests/rls/baseline.test.ts (every audit item must reproduce), then apply the remaining migrations;
+ *   2. run tests/rls/rls.test.ts (every item must be refused);
+ *   3. live only: remove every rls-test-<run id> account, row and file, then export the row counts and
+ *      compare them with the backup taken before the migrations;
+ *   4. record the service versions, timezone, Security Advisor results and storage grants, next to
  *      the production values recorded in AUDIT.md (OPEN_QUESTIONS.md, item 3), in tests/rls/runs/.
  *
  * Usage:
  *   node scripts/run-rls.ts local
  *   node --env-file=.env.staging.local scripts/run-rls.ts staging --reset-staging
+ *   node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only backups/2026-11-13
  *
- * It never touches production: it stops if any setting or the CLI link points at production.
+ * The live run never resets or migrates: the client project already has every migration
+ * (OPEN_QUESTIONS.md, decision D1). Its test accounts are created confirmed, so no email goes out.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { runSupabase } from './supabase-cli.ts';
 
 const productionProjectRef = 'ijlcjthgwppllhlqocep';
 const baselineVersion = '20261005025300';
-// From AUDIT.md (read on 2026-10-05, the last time production was read).
+// From AUDIT.md (read on 2026-10-05).
 const productionVersions: Record<string, string> = {
   postgres: '17.6.1.155',
   auth: 'v2.197.0',
@@ -26,33 +32,44 @@ const productionVersions: Record<string, string> = {
   timezone: 'UTC',
 };
 
-type Target = 'local' | 'staging';
+type Target = 'local' | 'staging' | 'live';
 
 function fail(message: string): never {
   console.error(`\n${message}`);
   process.exit(1);
 }
 
-const target = process.argv[2] as Target | undefined;
-if (target !== 'local' && target !== 'staging') {
-  fail('Say which stack to run against: "local" or "staging".');
+const requestedTarget = process.argv[2];
+if (requestedTarget !== 'local' && requestedTarget !== 'staging' && requestedTarget !== 'live') {
+  fail('Say which stack to run against: "local", "staging" or "live".');
 }
+const target: Target = requestedTarget;
 if (target === 'staging' && !process.argv.includes('--reset-staging')) {
   fail('The staging run resets the staging database to the baseline and back, deleting its data. Add --reset-staging to confirm.');
 }
+const backupFolder = process.argv[4] ?? '';
+if (target === 'live' && (process.argv[3] !== '--after-state-only' || !existsSync(`${backupFolder}/counts.json`))) {
+  fail('The live run creates rls-test-<run id> data on the client project and removes it afterwards (OPEN_QUESTIONS.md, D1). '
+    + 'Confirm with --after-state-only, followed by the backup folder whose counts.json it compares against.');
+}
+const runIdentifier = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
 
-/** Runs the Supabase CLI. Staging calls carry the staging database password so the CLI never creates a login role. */
-function supabase(arguments_: string[], options: { allowFailure?: boolean } = {}): string {
-  const environment = { ...process.env };
-  if (target === 'staging') {
-    environment.SUPABASE_DB_PASSWORD = process.env.STAGING_DB_PASSWORD ?? '';
+/**
+ * Runs the Supabase CLI. Staging calls carry the staging database password and live calls a placeholder
+ * (they only use the Management API), so the CLI never creates a login role on either project.
+ */
+function supabase(cliArguments: string[], options: { allowFailure?: boolean } = {}): string {
+  const passwords: Record<Target, Record<string, string>> = {
+    local: {},
+    staging: { SUPABASE_DB_PASSWORD: process.env.STAGING_DB_PASSWORD ?? '' },
+    live: { SUPABASE_DB_PASSWORD: 'not-used-by-management-api' },
+  };
+  const result = runSupabase(cliArguments, passwords[target]);
+  if (!result.succeeded && !options.allowFailure) {
+    fail(`supabase ${cliArguments.join(' ')} failed:\n${result.output}`);
   }
-  const result = spawnSync('supabase', arguments_, { encoding: 'utf8', env: environment, shell: process.platform === 'win32' });
-  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  if (result.status !== 0 && !options.allowFailure) {
-    fail(`supabase ${arguments_.join(' ')} failed:\n${output}`);
-  }
-  return output;
+  // Standard output only: the CLI's upgrade notice goes to standard error and isn't a result.
+  return result.standardOutput;
 }
 
 /** Reads one of the files `supabase link` keeps in supabase/.temp (the linked ref, service versions). */
@@ -100,57 +117,114 @@ function connectToStaging(): Connection {
   };
 }
 
-function runSuite(file: string, connection: Connection): { passed: boolean; summary: string } {
-  const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', file], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      RLS_TARGET: target,
-      RLS_SUPABASE_URL: connection.url,
-      RLS_PUBLISHABLE_KEY: connection.publishableKey,
-      RLS_SECRET_KEY: connection.secretKey,
-    },
-  });
+function connectToLive(): Connection {
+  const url = process.env.PRODUCTION_SUPABASE_URL ?? '';
+  if (process.env.PRODUCTION_PROJECT_REF !== productionProjectRef || !url.includes(productionProjectRef)) {
+    fail('Load the client project settings: node --env-file=.env.production.local scripts/run-rls.ts live ...');
+  }
+  // The cleanup and count queries go through the link, so it must be the same project the suite tests.
+  if (readLinkFile('project-ref') !== productionProjectRef) fail('Link the CLI to the client project first: supabase link --project-ref <ref>.');
+  return {
+    url,
+    publishableKey: process.env.PRODUCTION_SUPABASE_PUBLISHABLE_KEY ?? '',
+    secretKey: process.env.PRODUCTION_SUPABASE_SECRET_KEY ?? '',
+    locationFlag: '--linked',
+  };
+}
+
+/** Runs one Node script or test file, echoing its output, and returns whether it succeeded with its output. */
+function runNode(nodeArguments: string[], environment: Record<string, string> = {}): { passed: boolean; output: string } {
+  const result = spawnSync(process.execPath, nodeArguments, { encoding: 'utf8', env: { ...process.env, ...environment } });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   process.stdout.write(output);
-  const summary = output
+  return { passed: result.status === 0, output };
+}
+
+function runSuite(file: string, connection: Connection): { passed: boolean; summary: string } {
+  const result = runNode(['--test', '--test-concurrency=1', file], {
+    RLS_TARGET: target,
+    RLS_SUPABASE_URL: connection.url,
+    RLS_PUBLISHABLE_KEY: connection.publishableKey,
+    RLS_SECRET_KEY: connection.secretKey,
+    RLS_RUN_ID: runIdentifier,
+    RLS_LIVE_PROJECT: target === 'live' ? 'after-state-only' : '',
+  });
+  const summary = result.output
     .split(/\r?\n/)
     .filter((line) => /^\s*(✔|✖|ℹ (tests|pass|fail))/.test(line))
     .join('\n');
-  return { passed: result.status === 0, summary };
+  return { passed: result.passed, summary };
 }
 
 function query(connection: Connection, sql: string): string {
   return supabase(['db', 'query', connection.locationFlag, '--output', 'csv', sql], { allowFailure: true }).trim();
 }
 
-const connection = target === 'local' ? connectToLocal() : connectToStaging();
+type Counts = { counts: Record<string, number> };
+
+/** Every table's count before and after, so a leftover test row or a lost real row shows up. */
+function compareCounts(beforeFolder: string, afterFolder: string): string {
+  const before = (JSON.parse(readFileSync(`${beforeFolder}/counts.json`, 'utf8')) as Counts).counts;
+  const after = (JSON.parse(readFileSync(`${afterFolder}/counts.json`, 'utf8')) as Counts).counts;
+  const tableNames = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+  const rows = tableNames.map((tableName) => {
+    const beforeCount = before[tableName];
+    const afterCount = after[tableName];
+    const note = beforeCount === undefined ? 'new table' : beforeCount === afterCount ? 'same' : 'CHANGED';
+    return `| ${tableName} | ${beforeCount ?? '—'} | ${afterCount ?? '—'} | ${note} |`;
+  });
+  return `| Table | Backup | After the run | |\n|---|---|---|---|\n${rows.join('\n')}`;
+}
+
+const connectors: Record<Target, () => Connection> = { local: connectToLocal, staging: connectToStaging, live: connectToLive };
+const connection = connectors[target]();
 if (!connection.url || !connection.publishableKey || !connection.secretKey) {
   fail('Could not find the API URL and keys for this stack.');
 }
 
-console.log(`\n1/3  Resetting ${target} to the production baseline (${baselineVersion})...`);
-supabase(['db', 'reset', connection.locationFlag, '--version', baselineVersion, '--no-seed', '--yes']);
-const baselineRun = runSuite('tests/rls/baseline.test.ts', connection);
+let baselineRun: { passed: boolean; summary: string } | null = null;
+if (target !== 'live') {
+  console.log(`\nResetting ${target} to the production baseline (${baselineVersion})...`);
+  supabase(['db', 'reset', connection.locationFlag, '--version', baselineVersion, '--no-seed', '--yes']);
+  baselineRun = runSuite('tests/rls/baseline.test.ts', connection);
 
-console.log(`\n2/3  Applying every later migration to ${target}...`);
-if (target === 'local') {
-  supabase(['migration', 'up', '--local']);
-} else {
-  supabase(['db', 'push', '--linked', '--include-all', '--yes']);
+  console.log(`\nApplying every later migration to ${target}...`);
+  supabase(target === 'local' ? ['migration', 'up', '--local'] : ['db', 'push', '--linked', '--include-all', '--yes']);
 }
+
+console.log(`\nRunning the after-state suite on ${target} (run ${runIdentifier})...`);
 const fullRun = runSuite('tests/rls/rls.test.ts', connection);
 
-console.log('\n3/3  Recording versions, Security Advisor results and storage grants...');
+let cleanupSection = '';
+if (target === 'live') {
+  // Runs whether or not the suite passed: a failed run still leaves test data behind.
+  console.log(`\nRemoving the test data of run ${runIdentifier}...`);
+  const cleanup = runNode(['scripts/cleanup-rls-test-data.ts', runIdentifier]);
+  const afterFolder = `${backupFolder}-after-rls-${runIdentifier}`;
+  const exported = runNode(['scripts/export-project-data.ts', afterFolder]);
+  const comparison = exported.passed ? compareCounts(backupFolder, afterFolder) : 'The export failed; see the output above.';
+  cleanupSection = `
+## Cleanup of run ${runIdentifier}: **${cleanup.passed ? 'complete' : 'INCOMPLETE'}**
+\`\`\`
+${cleanup.output.trim()}
+\`\`\`
+
+## Row counts against ${backupFolder}
+${comparison}
+`;
+  if (!cleanup.passed) process.exitCode = 1;
+}
+
+console.log('\nRecording versions, Security Advisor results and storage grants...');
 const versions =
-  target === 'staging'
-    ? {
+  target === 'local'
+    ? { stack: supabase(['--version']).trim() }
+    : {
         postgres: readLinkFile('postgres-version') ?? 'unknown',
         auth: readLinkFile('gotrue-version') ?? 'unknown',
         postgrest: readLinkFile('rest-version') ?? 'unknown',
         storage: readLinkFile('storage-version') ?? 'unknown',
-      }
-    : { stack: supabase(['--version']).trim() };
+      };
 const databaseFacts = query(connection, `select version() as postgres, current_setting('TimeZone') as timezone`);
 const storageGrants = query(
   connection,
@@ -161,22 +235,25 @@ const storageGrants = query(
    where namespace.nspname = 'storage' and relation.relkind = 'r' and has_table_privilege(role_name, relation.oid, privilege)
    order by 1, 2, 3`,
 );
-const advisors = target === 'staging' ? supabase(['db', 'advisors', '--linked', '--type', 'security', '--level', 'info'], { allowFailure: true }).trim() : 'Not available on the local stack.';
+const advisors = target === 'local' ? 'Not available on the local stack.' : supabase(['db', 'advisors', '--linked', '--type', 'security', '--level', 'info'], { allowFailure: true }).trim();
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const comparison =
-  target === 'staging'
-    ? Object.entries(productionVersions)
-        .map(([service, productionValue]) => `| ${service} | ${productionValue} | ${service === 'timezone' ? databaseFacts : (versions as Record<string, string>)[service] ?? 'unknown'} |`)
-        .join('\n')
-    : '';
-const record = `# RLS run: ${target}, ${new Date().toISOString()}
+  target === 'local'
+    ? ''
+    : Object.entries(productionVersions)
+        .map(([service, productionValue]) => `| ${service} | ${productionValue} | ${service === 'timezone' ? databaseFacts.split(',').at(-1) : (versions as Record<string, string>)[service] ?? 'unknown'} |`)
+        .join('\n');
+const baselineLine = baselineRun
+  ? `**${baselineRun.passed ? 'passed' : 'FAILED'}**`
+  : 'not run (the client project already has every migration; OPEN_QUESTIONS.md, D1)';
+const record = `# RLS run: ${target}, ${new Date().toISOString()} (run ${runIdentifier})
 
-- Baseline suite (every audit item must reproduce): **${baselineRun.passed ? 'passed' : 'FAILED'}**
+- Baseline suite (every audit item must reproduce): ${baselineLine}
 - Full suite (every audit item refused, PRD rules hold): **${fullRun.passed ? 'passed' : 'FAILED'}**
 
 ## Versions
-${target === 'staging' ? `| Service | Production (AUDIT.md) | Staging |\n|---|---|---|\n${comparison}` : `\`${JSON.stringify(versions)}\``}
+${target === 'local' ? `\`${JSON.stringify(versions)}\`` : `| Service | Production (AUDIT.md) | This run |\n|---|---|---|\n${comparison}`}
 
 Database: \`${databaseFacts.replace(/\r?\n/g, ' | ')}\`
 
@@ -189,19 +266,14 @@ ${storageGrants || '(none)'}
 \`\`\`
 ${advisors}
 \`\`\`
-
-## Baseline suite
-\`\`\`
-${baselineRun.summary}
-\`\`\`
-
+${baselineRun ? `\n## Baseline suite\n\`\`\`\n${baselineRun.summary}\n\`\`\`\n` : ''}
 ## Full suite
 \`\`\`
 ${fullRun.summary}
 \`\`\`
-`;
+${cleanupSection}`;
 mkdirSync('tests/rls/runs', { recursive: true });
 const recordPath = `tests/rls/runs/${stamp}-${target}.md`;
 writeFileSync(recordPath, record);
 console.log(`\nRecorded in ${recordPath}`);
-process.exitCode = baselineRun.passed && fullRun.passed ? 0 : 1;
+if ((baselineRun && !baselineRun.passed) || !fullRun.passed) process.exitCode = 1;

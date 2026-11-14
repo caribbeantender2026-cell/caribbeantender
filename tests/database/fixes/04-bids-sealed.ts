@@ -115,15 +115,19 @@ export const bidRulesSuite: FixSuite = {
       },
     },
     {
-      name: "Q11: a bid is refused when any file in its folder was uploaded by someone else",
+      name: "Q11: submit_bid refuses a bid when any file under its path, at any depth, was uploaded by someone else",
       run: async (database) => {
         const businessId = await createUser(database, { accountType: 'business' });
         const supplierId = await createUser(database, { accountType: 'supplier' });
         const intruderId = await createUser(database, { accountType: 'supplier' });
         const tenderId = await createTender(database, businessId, 'accepting-bids');
-        const bidId = randomUUID();
-        await createStoredFile(database, 'bid-documents', `${tenderId}/${bidId}/planted.pdf`, intruderId);
-        assertRefused(await submitBidAs(database, supplierId, tenderId, { bidId }), 'bid with a planted file', /not uploaded by you/);
+        for (const plantedPath of ['planted.pdf', 'proposal/planted.pdf']) {
+          const bidId = randomUUID();
+          await createStoredFile(database, 'bid-documents', `${tenderId}/${bidId}/${plantedPath}`, intruderId);
+          assertRefused(await submitBidAs(database, supplierId, tenderId, { bidId }), `bid with ${plantedPath} planted`, /not uploaded by you/);
+          const recorded = await scalar<number>(database, `select count(*)::integer as value from public.bids where id = $1`, [bidId]);
+          assert.equal(recorded, 0, 'nothing is recorded');
+        }
       },
     },
     {
