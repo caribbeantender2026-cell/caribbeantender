@@ -1,6 +1,6 @@
 /**
- * Sends every due email (PRD P1-13). pg_cron calls this every minute with a shared secret
- * (migration 20261114010000); public.due_emails decides who gets what, and sendEmail sends each one
+ * Sends every due email (PRD P1-13). pg_cron calls this every minute with a shared secret kept in
+ * Vault (migration 20261114010000); public.due_emails decides who gets what, and sendEmail sends each one
  * at most once, and only to EMAIL_ALLOWLIST until go-live (OPEN_QUESTIONS.md, decision D3).
  */
 import { createClient } from 'npm:@supabase/supabase-js@2.117.2';
@@ -10,12 +10,14 @@ import { composeEmail, secretMatches, type DueEmail } from './notifications.ts';
 const batchSize = 50;
 
 Deno.serve(async (request) => {
-  if (!secretMatches(request.headers.get('x-cron-secret'), Deno.env.get('CRON_SECRET'))) {
-    return new Response('Not allowed.', { status: 401 });
-  }
   const database = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', {
     auth: { persistSession: false },
   });
+  // An unset or unreadable secret refuses every call.
+  const expectedSecret = await database.rpc('notifications_cron_secret');
+  if (!secretMatches(request.headers.get('x-cron-secret'), expectedSecret.data ?? undefined)) {
+    return new Response('Not allowed.', { status: 401 });
+  }
   const due = await database.rpc('due_emails', { batch_size: batchSize });
   if (due.error) {
     return new Response(`Could not read the due emails: ${due.error.message}`, { status: 500 });

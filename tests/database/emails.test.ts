@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { before, test } from 'node:test';
 import type { PGlite } from '@electric-sql/pglite';
-import { createBid, createDatabase, createTender, createUser, runAs, service, user, writeFixture } from './harness.ts';
+import { anonymous, createBid, createDatabase, createTender, createUser, runAs, service, user, writeFixture } from './harness.ts';
 
 type DueEmail = { type: string; recipient: string; entity_id: string };
 
@@ -95,7 +95,10 @@ test('An email in email_log, sent or suppressed, is never due again', async () =
   assert.ok(!has(await dueEmails(), 'new_tender_alert', matching, ids.newTender ?? ''));
 });
 
-test('Only the service role can list due emails, because the list holds email addresses', async () => {
+test('Only the service role can list due emails or read the cron secret', async () => {
   assert.match((await runAs(database, user(ids.business ?? ''), `select * from public.due_emails(10)`)).error?.message ?? '', /permission denied/);
+  for (const actor of [user(ids.business ?? '', 'aal2'), anonymous]) {
+    assert.match((await runAs(database, actor, `select public.notifications_cron_secret()`)).error?.message ?? '', /permission denied/);
+  }
   assert.equal((await runAs(database, service, `select * from public.due_emails(10)`)).error, null);
 });

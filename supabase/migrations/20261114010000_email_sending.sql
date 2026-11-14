@@ -75,7 +75,24 @@ $$;
 revoke all on function public.due_emails(integer) from public, anon, authenticated;
 grant execute on function public.due_emails(integer) to service_role;
 
--- The Edge Function's address and a shared secret live in Vault, set once per project (DEPLOY.md,
+-- The shared secret pg_cron sends, for send-notifications to check against. It lives only in Vault,
+-- so it is never copied into a dashboard field or an Edge Function setting. Service role only.
+-- plpgsql, so the body is only checked when called (the local test database has no Vault).
+create function public.notifications_cron_secret() returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  return (select secret.decrypted_secret from vault.decrypted_secrets secret where secret.name = 'send_notifications_cron_secret');
+end;
+$$;
+
+revoke all on function public.notifications_cron_secret() from public, anon, authenticated;
+grant execute on function public.notifications_cron_secret() to service_role;
+
+-- The Edge Function's address and the shared secret live in Vault, set once per project (DEPLOY.md,
 -- step 9), so neither is in this file and no key is stored in the database. Until both are set, the
 -- job does nothing.
 select cron.schedule(
