@@ -10,23 +10,34 @@ export type AccountType = 'business' | 'supplier';
 type AccountState = {
   session: Session | null;
   isLoading: boolean;
+  profile: Tables<'profiles'> | null;
   businessProfile: Tables<'business_profiles'> | null;
   supplierProfile: Tables<'supplier_profiles'> | null;
+  /** The person's staff role, or null for everyone who isn't staff. Admin pages also need MFA (aal2). */
+  staffRole: Tables<'staff_members'>['role'] | null;
   refreshAccounts: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AccountContext = createContext<AccountState | null>(null);
 
-/** Loads which business and supplier accounts a login has (either may be missing). */
+/** Loads a login's profile, its business and supplier accounts (either may be missing) and any staff role. */
 export async function loadAccounts(userId: string) {
-  const [businessResult, supplierResult] = await Promise.all([
+  const [profileResult, businessResult, supplierResult, staffResult] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
     supabase.from('business_profiles').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('supplier_profiles').select('*').eq('user_id', userId).maybeSingle(),
+    supabase.from('staff_members').select('role').eq('user_id', userId).maybeSingle(),
   ]);
-  if (businessResult.error) throw businessResult.error;
-  if (supplierResult.error) throw supplierResult.error;
-  return { businessProfile: businessResult.data, supplierProfile: supplierResult.data };
+  for (const result of [profileResult, businessResult, supplierResult, staffResult]) {
+    if (result.error) throw result.error;
+  }
+  return {
+    profile: profileResult.data,
+    businessProfile: businessResult.data,
+    supplierProfile: supplierResult.data,
+    staffRole: staffResult.data?.role ?? null,
+  };
 }
 
 /** Creates the signed-in person's business or supplier account, as the "Create ... Account" buttons do. */
@@ -63,8 +74,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const value: AccountState = {
     session,
     isLoading: isSessionLoading || (userId !== null && accountsQuery.isPending),
+    profile: accountsQuery.data?.profile ?? null,
     businessProfile: accountsQuery.data?.businessProfile ?? null,
     supplierProfile: accountsQuery.data?.supplierProfile ?? null,
+    staffRole: accountsQuery.data?.staffRole ?? null,
     refreshAccounts: async () => {
       await queryClient.invalidateQueries({ queryKey: ['accounts', userId] });
     },

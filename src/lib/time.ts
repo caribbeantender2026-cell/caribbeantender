@@ -59,3 +59,25 @@ export function utcToJamaicaLocal(timestamp: string): string {
   const valueOf = (partType: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === partType)?.value ?? '';
   return `${valueOf('year')}-${valueOf('month')}-${valueOf('day')}T${valueOf('hour')}:${valueOf('minute')}`;
 }
+
+const millisecondsPerSecond = 1000;
+const secondsPerMinute = 60;
+const secondsPerHour = 3600;
+const secondsPerDay = 86_400;
+
+/** Time left until a moment, for a countdown, for example "2 days 3 hours" or "4 minutes 10 seconds"; null once it has passed. */
+export function formatTimeLeft(until: string, now: Date = new Date()): string | null {
+  const totalSeconds = Math.floor((new Date(until).getTime() - now.getTime()) / millisecondsPerSecond);
+  if (totalSeconds <= 0) {
+    return null;
+  }
+  const days = Math.floor(totalSeconds / secondsPerDay);
+  const hours = Math.floor((totalSeconds % secondsPerDay) / secondsPerHour);
+  const minutes = Math.floor((totalSeconds % secondsPerHour) / secondsPerMinute);
+  const seconds = totalSeconds % secondsPerMinute;
+  const unit = (count: number, name: string): string => `${count} ${name}${count === 1 ? '' : 's'}`;
+  // The two largest units that matter; seconds only in the last hour, when they do.
+  if (days > 0) return `${unit(days, 'day')} ${unit(hours, 'hour')}`;
+  if (hours > 0) return `${unit(hours, 'hour')} ${unit(minutes, 'minute')}`;
+  return `${unit(minutes, 'minute')} ${unit(seconds, 'second')}`;
+}

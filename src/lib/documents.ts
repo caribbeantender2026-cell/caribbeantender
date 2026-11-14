@@ -5,21 +5,22 @@ const maximumDocumentSizeMegabytes = 10;
 export const maximumDocumentSizeBytes = maximumDocumentSizeMegabytes * bytesPerMegabyte;
 const maximumStoredFileNameLength = 100;
 
-// The same types the buckets accept. Legacy .xls is left out on purpose: old binary Office files can carry macros.
+// The same types the buckets accept (PRD P1-06; AUDIT.md A5 includes .xls).
 const contentTypesByExtension: Record<string, string> = {
   pdf: 'application/pdf',
   doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
-/** The file chooser's accept list, for example ".pdf,.doc,.docx,.xlsx". */
+/** The file chooser's accept list, for example ".pdf,.doc,.docx,.xls,.xlsx". */
 export const acceptedDocumentExtensions = Object.keys(contentTypesByExtension)
   .map((extension) => `.${extension}`)
   .join(',');
 
 /** A human description of the accepted documents, for help text and error messages. */
-export const acceptedDocumentDescription = `PDF, Word (.doc, .docx) or Excel (.xlsx), up to ${maximumDocumentSizeMegabytes} MB`;
+export const acceptedDocumentDescription = `PDF, Word (.doc, .docx) or Excel (.xls, .xlsx), up to ${maximumDocumentSizeMegabytes} MB`;
 
 /**
  * Checks a chosen file and returns the content type to upload it with, or a plain-English problem.
@@ -40,15 +41,25 @@ export function checkDocument(file: { name: string; size: number }): { contentTy
   return { contentType };
 }
 
-/**
- * Builds the storage path for an upload: the owner's own folder (which the storage policies require),
- * a random id so names never collide, and the file name reduced to safe characters.
- */
-export function documentStoragePath(ownerId: string, fileName: string): string {
-  const safeFileName = fileName
+/** A file name reduced to safe characters; it becomes the document's name once the tender or bid is recorded. */
+function safeFileName(fileName: string): string {
+  const cleaned = fileName
     .replace(/[^a-zA-Z0-9._-]/g, '_')
     .replace(/\.{2,}/g, '.')
     .replace(/^\.+/, '')
     .slice(-maximumStoredFileNameLength);
-  return `${ownerId}/${crypto.randomUUID()}-${safeFileName || 'document'}`;
+  return cleaned || 'document';
+}
+
+/**
+ * Where a tender's file goes: tender-documents/{tender id}/..., with an uploaded requirements form in
+ * requirements-form/ (the storage policies and publish_tender expect exactly this).
+ */
+export function tenderDocumentPath(tenderId: string, fileName: string, isRequirementsForm: boolean): string {
+  return `${tenderId}/${isRequirementsForm ? 'requirements-form/' : ''}${safeFileName(fileName)}`;
+}
+
+/** Where a bid's file goes: bid-documents/{tender id}/{bid id}/..., with an uploaded proposal in proposal/ (submit_bid expects this). */
+export function bidDocumentPath(tenderId: string, bidId: string, fileName: string, isProposal: boolean): string {
+  return `${tenderId}/${bidId}/${isProposal ? 'proposal/' : ''}${safeFileName(fileName)}`;
 }

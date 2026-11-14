@@ -1,19 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkDocument, documentStoragePath, maximumDocumentSizeBytes } from '../../src/lib/documents.ts';
+import { bidDocumentPath, checkDocument, maximumDocumentSizeBytes, tenderDocumentPath } from '../../src/lib/documents.ts';
 
-const ownerId = '11111111-1111-1111-1111-111111111111';
+const tenderId = '11111111-1111-1111-1111-111111111111';
+const bidId = '22222222-2222-2222-2222-222222222222';
 
 test('Accepted documents get the content type the bucket expects, whatever the browser says', () => {
   assert.deepEqual(checkDocument({ name: 'Proposal.PDF', size: 2048 }), { contentType: 'application/pdf' });
   assert.deepEqual(checkDocument({ name: 'pricing.xlsx', size: 2048 }), {
     contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
+  assert.deepEqual(checkDocument({ name: 'old-pricing.XLS', size: 2048 }), { contentType: 'application/vnd.ms-excel' });
 });
 
 test('Unaccepted, disguised, empty and oversized files are refused with a reason', () => {
   const refused = [
-    { name: 'macros.xls', size: 10 },
+    { name: 'page.html', size: 10 },
     { name: 'proposal.pdf.exe', size: 10 },
     { name: 'no-extension', size: 10 },
     { name: 'empty.pdf', size: 0 },
@@ -25,15 +27,20 @@ test('Unaccepted, disguised, empty and oversized files are refused with a reason
   }
 });
 
-test("A storage path always sits in the owner's folder and cannot climb out of it", () => {
-  const path = documentStoragePath(ownerId, '../../other-user/secret.pdf');
-  assert.ok(path.startsWith(`${ownerId}/`));
-  assert.equal(path.split('/').length, 2, 'no extra folder levels');
-  assert.ok(!path.includes('..'));
+test('Paths follow the folders the storage policies require and cannot climb out of them', () => {
+  assert.equal(tenderDocumentPath(tenderId, 'Specification.pdf', false), `${tenderId}/Specification.pdf`);
+  assert.equal(tenderDocumentPath(tenderId, 'Form.pdf', true), `${tenderId}/requirements-form/Form.pdf`);
+  assert.equal(bidDocumentPath(tenderId, bidId, 'Offer.pdf', true), `${tenderId}/${bidId}/proposal/Offer.pdf`);
+  assert.equal(bidDocumentPath(tenderId, bidId, 'Prices.xlsx', false), `${tenderId}/${bidId}/Prices.xlsx`);
+  for (const path of [tenderDocumentPath(tenderId, '../../other/secret.pdf', false), bidDocumentPath(tenderId, bidId, '../../../x/y.pdf', false)]) {
+    assert.ok(!path.includes('..'), path);
+    assert.equal(path.split('/').length, path.startsWith(`${tenderId}/${bidId}`) ? 3 : 2, `no extra folder levels: ${path}`);
+  }
+  assert.equal(tenderDocumentPath(tenderId, '...', false), `${tenderId}/document`, 'a name of only dots');
 });
 
 test('Unsafe characters are replaced and very long names are shortened', () => {
-  const path = documentStoragePath(ownerId, `<script>${'a'.repeat(500)}.pdf`);
+  const path = tenderDocumentPath(tenderId, `<script>${'a'.repeat(500)}.pdf`, false);
   const storedName = path.split('/')[1] ?? '';
   assert.ok(!/[<>]/.test(storedName));
   assert.ok(storedName.endsWith('.pdf'));

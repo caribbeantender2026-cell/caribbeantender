@@ -1,11 +1,13 @@
 /** The company profile form, shared by business and supplier accounts. */
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAccount, type AccountType } from '../../auth/AccountContext.tsx';
 import { Notice } from '../../components/Notices.tsx';
+import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
 const maximumCompanyNameLength = 160;
@@ -13,19 +15,10 @@ const maximumAddressLength = 300;
 const maximumPhoneLength = 40;
 const maximumDescriptionLength = 2000;
 
-const industryCategories = [
-  'Goods and Supplies',
-  'Works',
-  'Professional Services',
-  'Technology Services',
-  'Security Services',
-  'Cleaning and Janitorial',
-] as const;
-
 const profileSchema = z.object({
   companyName: z.string().trim().min(2, 'Enter the company name.').max(maximumCompanyNameLength, `Use at most ${maximumCompanyNameLength} characters.`),
   companyAddress: z.string().trim().min(1, 'Enter the company address.').max(maximumAddressLength, `Use at most ${maximumAddressLength} characters.`),
-  industryCategory: z.string(),
+  categoryId: z.string(),
   phone: z.string().trim().min(1, 'Enter a contact number.').max(maximumPhoneLength, `Use at most ${maximumPhoneLength} characters.`),
   contactEmail: z.email('Enter a valid contact email address.'),
   description: z.string().trim().min(1, 'Describe the company.').max(maximumDescriptionLength, `Use at most ${maximumDescriptionLength} characters.`),
@@ -34,18 +27,19 @@ type ProfileValues = z.infer<typeof profileSchema>;
 
 export function CompanyProfilePage({ accountType }: { accountType: AccountType }) {
   const { session, businessProfile, supplierProfile, refreshAccounts } = useAccount();
+  const categoriesQuery = useCategories();
   const profile = accountType === 'business' ? businessProfile : supplierProfile;
   const [outcome, setOutcome] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
   const form = useForm<ProfileValues>({
     resolver: zodResolver(
       accountType === 'supplier'
-        ? profileSchema.extend({ industryCategory: z.enum(industryCategories, { message: 'Choose an industry category.' }) })
+        ? profileSchema.extend({ categoryId: z.string().min(1, 'Choose a category.') })
         : profileSchema,
     ),
     defaultValues: {
       companyName: profile?.company_name ?? '',
       companyAddress: profile?.company_address ?? '',
-      industryCategory: supplierProfile?.industry_category ?? '',
+      categoryId: supplierProfile?.category_id?.toString() ?? '',
       phone: profile?.phone ?? '',
       contactEmail: profile?.contact_email ?? '',
       description: profile?.description ?? '',
@@ -67,7 +61,7 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
     const { error } =
       accountType === 'business'
         ? await supabase.from('business_profiles').update(sharedChanges).eq('user_id', session.user.id)
-        : await supabase.from('supplier_profiles').update({ ...sharedChanges, industry_category: values.industryCategory }).eq('user_id', session.user.id);
+        : await supabase.from('supplier_profiles').update({ ...sharedChanges, category_id: Number(values.categoryId) }).eq('user_id', session.user.id);
     if (error) {
       setOutcome({ tone: 'error', text: `Unable to save the profile: ${errorMessage(error)}` });
       return;
@@ -77,6 +71,7 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
   }
 
   return (
+    <>
     <div className="card form">
       <h2>{accountType === 'business' ? 'Business Company Profile' : 'Supplier Profile'}</h2>
       <form onSubmit={form.handleSubmit(saveProfile)} noValidate>
@@ -90,12 +85,12 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
 
         {accountType === 'supplier' && (
           <>
-            <label htmlFor="industryCategory">Industry Category</label>
-            <select id="industryCategory" {...form.register('industryCategory')}>
+            <label htmlFor="categoryId">Category (new tender alerts follow it)</label>
+            <select id="categoryId" {...form.register('categoryId')}>
               <option value="">Select category</option>
-              {industryCategories.map((category) => <option key={category}>{category}</option>)}
+              {(categoriesQuery.data ?? []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
-            {errors.industryCategory && <div className="match-error">{errors.industryCategory.message}</div>}
+            {errors.categoryId && <div className="match-error">{errors.categoryId.message}</div>}
           </>
         )}
 
@@ -118,5 +113,46 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
         </div>
       </form>
     </div>
+    {accountType === 'supplier' && session && <TenderAlertsSetting userId={session.user.id} />}
+    </>
   );
 }
+
+/** Lets a supplier turn new-tender emails off and on (PRD P1-13). No row means alerts are on. */
+function TenderAlertsSetting({ userId }: { userId: string }) {
+  const [problem, setProblem] = useState<string | null>(null);
+  const preferenceQuery = useQuery({
+    queryKey: ['notification-preferences', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('notification_preferences').select('tender_alerts').eq('user_id', userId).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  async function change(tenderAlerts: boolean) {
+    setProblem(null);
+    // Update or insert, not upsert: users may not update user_id, which an upsert writes.
+    const { error } = preferenceQuery.data
+      ? await supabase.from('notification_preferences').update({ tender_alerts: tenderAlerts }).eq('user_id', userId)
+      : await supabase.from('notification_preferences').insert({ user_id: userId, tender_alerts: tenderAlerts });
+    if (error) setProblem(errorMessage(error));
+    await preferenceQuery.refetch();
+  }
+
+  if (preferenceQuery.isPending) return null;
+  const tenderAlerts = preferenceQuery.data?.tender_alerts ?? true;
+  return (
+    <div className="card form">
+      <h3>Email settings</h3>
+      <label className="checkbox" htmlFor="tenderAlerts">
+        <input id="tenderAlerts" type="checkbox" checked={tenderAlerts} onChange={(event) => void change(event.target.checked)} />
+        Email me when a new tender is published in my category
+      </label>
+      {problem && <Notice tone="error">{problem}</Notice>}
+    </div>
+  );
+}
+
+export const BusinessProfilePage = () => <CompanyProfilePage accountType="business" />;
+export const SupplierProfilePage = () => <CompanyProfilePage accountType="supplier" />;

@@ -13,8 +13,9 @@
 | 1. Backup | Every public table, the auth users (id, email, created_at, metadata) and the list of stored files exported as JSON to `backups/2026-11-13/` (gitignored, kept on Tevin's machine). Supabase's own daily backup is the restore point. |
 | 2. Pre-checks | Every check passed. 4 suppliers had no subscription status; they became `expired` (OPEN_QUESTIONS.md, D2). |
 | 3. C1 fix | Not applied by hand, so `20261005031017` was pushed with the rest. |
-| 4. Migrations | `20261005025300` marked applied; `20261005031017` and `20261005040050` to `20261005041100` applied one at a time, with no failures. |
+| 4. Migrations | `20261005025300` marked applied; `20261005031017` and `20261005040050` to `20261005041100` applied one at a time, with no failures. `20261113230000` (email_log `suppressed`) applied the same day. |
 | 5. payment-webhook | Deleted; a POST now returns 404. |
+| Edge Functions | `download-document` deployed (Stage 3): it signs 60-second download links after `request_document_download` checks and logs the request. It sends no email. Redeploy after changing it: `supabase functions deploy download-document --project-ref <production ref> --use-api`. |
 | Checks after | Security Advisor: 0 errors, 13 warnings (12 intended signed-in remote procedures, plus leaked-password protection off), 1 info. The RLS suite passed 26 of 26 against the project (`tests/rls/runs/2026-11-14T03-31-02-116Z-live.md`); its `rls-test-<run id>` accounts, rows and files were removed, and every existing table's row count matches the backup. |
 
 ## 1. Backup

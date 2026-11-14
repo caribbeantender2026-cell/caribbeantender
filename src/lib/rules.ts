@@ -11,8 +11,9 @@ export type TenderPhase = 'draft' | 'accepting-bids' | 'awaiting-opening' | 'ope
 export const tenderPhaseDisplay: Record<TenderPhase, { label: string; badgeStyle: string }> = {
   draft: { label: 'Draft', badgeStyle: 'draft' },
   'accepting-bids': { label: 'Open', badgeStyle: 'open' },
-  'awaiting-opening': { label: 'Deadline passed', badgeStyle: 'waiting' },
-  opened: { label: 'Closed, bids opened', badgeStyle: 'closed' },
+  // The close job sets "closed" within a minute of closes_at (OPEN_QUESTIONS.md, item 26).
+  'awaiting-opening': { label: 'Closing…', badgeStyle: 'waiting' },
+  opened: { label: 'Closed', badgeStyle: 'closed' },
   awarded: { label: 'Awarded', badgeStyle: 'awarded' },
   cancelled: { label: 'Cancelled', badgeStyle: 'cancelled' },
 };
@@ -41,18 +42,19 @@ export function tenderPhase(
 
 /** Whether a supplier's trial or subscription currently allows bidding (same rule as private.supplier_has_access). */
 export function supplierHasAccess(
-  subscription: Pick<Tables<'subscriptions'>, 'status' | 'trial_ends_at' | 'current_period_ends_at'> | null,
+  subscription: Pick<Tables<'subscriptions'>, 'status' | 'trial_ends_at' | 'current_period_end'> | null,
   now: Date = new Date(),
 ): boolean {
   if (!subscription) {
     return false;
   }
   const isLater = (timestamp: string | null): boolean => timestamp !== null && new Date(timestamp).getTime() > now.getTime();
-  if (subscription.status === 'trialing') {
+  if (subscription.status === 'trial') {
     return isLater(subscription.trial_ends_at);
   }
   if (subscription.status === 'active') {
-    return isLater(subscription.current_period_ends_at);
+    // An active subscription with no end date counts as active (Part B, decision 5).
+    return subscription.current_period_end === null || isLater(subscription.current_period_end);
   }
   return false;
 }

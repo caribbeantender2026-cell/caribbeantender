@@ -1,86 +1,97 @@
-/** One tender: its terms, deadline, document, and the right next step for whoever is looking. */
-import { useState } from 'react';
+/** One tender for signed-in users: details, closing time with a countdown, and its documents (PRD P1-05). */
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../auth/AccountContext.tsx';
+import { DocumentList } from '../components/DocumentList.tsx';
 import { ErrorNotice, Loading, Notice } from '../components/Notices.tsx';
-import { downloadStoredFile, useCompanyNames } from '../lib/queries.ts';
+import { useCategories, useCompanyNames } from '../lib/queries.ts';
 import { tenderPhase, tenderPhaseDisplay } from '../lib/rules.ts';
-import { errorMessage, supabase } from '../lib/supabase.ts';
-import { formatJamaicaDateTime } from '../lib/time.ts';
+import { supabase } from '../lib/supabase.ts';
+import { formatJamaicaDateTime, formatTimeLeft } from '../lib/time.ts';
 
-export function TenderDetailsPage() {
-  const { tenderId = '' } = useParams();
-  const { session, supplierProfile } = useAccount();
-  const [downloadProblem, setDownloadProblem] = useState<string | null>(null);
+const countdownTickMilliseconds = 1000;
 
-  const tenderQuery = useQuery({
+/** The current time, updated every second, for a live countdown. */
+function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), countdownTickMilliseconds);
+    return () => window.clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/** A tender and its recorded documents, as the signed-in user may see them. */
+export function useTender(tenderId: string) {
+  return useQuery({
     queryKey: ['tender', tenderId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('tenders').select('*').eq('id', tenderId).maybeSingle();
-      if (error) throw error;
-      return data;
+      const [tenderResult, documentsResult] = await Promise.all([
+        supabase.from('tenders').select('*').eq('id', tenderId).maybeSingle(),
+        supabase.from('tender_documents').select('id, file_name, document_role, size_bytes').eq('tender_id', tenderId).order('file_name'),
+      ]);
+      if (tenderResult.error) throw tenderResult.error;
+      if (documentsResult.error) throw documentsResult.error;
+      return { tender: tenderResult.data, documents: documentsResult.data };
     },
   });
-  const tender = tenderQuery.data;
-  const namesQuery = useCompanyNames('business_names_public', tender ? [tender.business_id] : []);
+}
+
+export function TenderDetailsPage() {
+  const tenderId = useParams().tenderId ?? '';
+  const { session, supplierProfile } = useAccount();
+  const now = useNow();
+  const tenderQuery = useTender(tenderId);
+  const tender = tenderQuery.data?.tender ?? null;
+  const namesQuery = useCompanyNames(tender ? [tender.business_id] : []);
+  const categoriesQuery = useCategories();
 
   if (tenderQuery.isPending) return <Loading />;
   if (tenderQuery.isError) return <ErrorNotice error={tenderQuery.error} />;
-  if (!tender) return <Notice tone="error">Tender not found. It may be a draft, or the link may be wrong.</Notice>;
+  if (!tender) return <Notice tone="error">Tender not found. It may have been removed, or it isn't published yet.</Notice>;
 
-  const phase = tenderPhase(tender);
-  const isOwner = session?.user.id === tender.business_id;
-  const documentPath = tender.document_path;
-
-  async function downloadDocument() {
-    if (!documentPath) return;
-    setDownloadProblem(null);
-    try {
-      await downloadStoredFile('tender-documents', documentPath, tender?.document_name ?? 'tender-document');
-    } catch (error) {
-      setDownloadProblem(`Unable to download the document: ${errorMessage(error)}`);
-    }
-  }
+  const phase = tenderPhase(tender, now);
+  const isOwner = tender.business_id === session?.user.id;
+  const timeLeft = formatTimeLeft(tender.closes_at, now);
+  const categoryName = categoriesQuery.data?.find((category) => category.id === tender.category_id)?.name ?? '—';
 
   return (
-    <div className="card">
+    <>
       <h2>{tender.title}</h2>
-      <p><strong>Business:</strong> {namesQuery.data?.get(tender.business_id) || 'Business'}</p>
-      <p>
-        <strong>Closes:</strong> {formatJamaicaDateTime(tender.closes_at)} (Jamaica time){' '}
-        <span className={`badge ${tenderPhaseDisplay[phase].badgeStyle}`}>{tenderPhaseDisplay[phase].label}</span>
-      </p>
-      <p className="preserve-lines">{tender.description}</p>
-
-      {documentPath && (
+      <div className="card">
         <p>
-          <strong>Supporting Document:</strong>{' '}
-          {session ? (
-            <button type="button" className="btn outline" onClick={() => void downloadDocument()}>
-              Download {tender.document_name ?? 'document'}
-            </button>
-          ) : (
-            <Link to={`/login?next=${encodeURIComponent(`/tenders/${tender.id}`)}`}>Log in to download the document</Link>
-          )}
+          <span className={`badge ${tenderPhaseDisplay[phase].badgeStyle}`}>{tenderPhaseDisplay[phase].label}</span>
         </p>
-      )}
-      {downloadProblem && <Notice tone="error">{downloadProblem}</Notice>}
-
-      {(phase === 'accepting-bids' || phase === 'awaiting-opening') && (
-        <Notice>Bids are sealed. Bids open at {formatJamaicaDateTime(tender.closes_at)} (Jamaica time).</Notice>
-      )}
-
-      <div className="actions">
-        {phase === 'accepting-bids' && supplierProfile && !isOwner && (
-          <Link className="btn" to={`/tenders/${tender.id}/bid`}>Submit Bid</Link>
-        )}
-        {phase === 'accepting-bids' && !session && (
-          <Link className="btn" to={`/login?next=${encodeURIComponent(`/tenders/${tender.id}/bid`)}`}>Log in as a supplier to bid</Link>
-        )}
-        {isOwner && <Link className="btn" to={`/business/tenders/${tender.id}/bids`}>Manage Bids</Link>}
-        <Link className="btn gold" to="/tenders">Back to Tenders</Link>
+        <dl className="details">
+          <dt>Business</dt>
+          <dd>{namesQuery.data?.get(tender.business_id) ?? '—'}</dd>
+          <dt>Category</dt>
+          <dd>{categoryName}</dd>
+          <dt>Closes</dt>
+          <dd>
+            {formatJamaicaDateTime(tender.closes_at)} Jamaica time
+            {timeLeft && phase === 'accepting-bids' && <> (<span aria-live="off">{timeLeft} left</span>)</>}
+          </dd>
+          {tender.cancelled_reason && (
+            <>
+              <dt>Cancelled because</dt>
+              <dd className="preserve-lines">{tender.cancelled_reason}</dd>
+            </>
+          )}
+        </dl>
+        <h3>Description</h3>
+        <p className="preserve-lines">{tender.description}</p>
+        <h3>Documents</h3>
+        <DocumentList documents={tenderQuery.data?.documents ?? []} />
+        <div className="actions">
+          {isOwner && <Link className="btn" to={`/business/tenders/${tender.id}`}>Manage this tender</Link>}
+          {!isOwner && supplierProfile && phase === 'accepting-bids' && (
+            <Link className="btn gold" to={`/tenders/${tender.id}/bid`}>Submit a bid</Link>
+          )}
+          <Link className="btn outline" to="/tenders">Back to open tenders</Link>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { createAccount, useAccount, type AccountType } from '../auth/AccountContext.tsx';
-import { configurationProblem, errorMessage } from '../lib/supabase.ts';
+import { configurationProblem, errorMessage, supportEmail } from '../lib/supabase.ts';
 import { jamaicaTimeZone } from '../lib/time.ts';
 import { Loading, Notice } from './Notices.tsx';
 
@@ -12,18 +12,15 @@ const dashboardPath: Record<AccountType, string> = { business: '/business', supp
 const accountLabel: Record<AccountType, string> = { business: 'Business', supplier: 'Supplier' };
 
 const businessLinks: NavigationLink[] = [
-  { to: '/', label: 'Homepage' },
-  { to: '/tenders', label: 'Current Tenders' },
-  { to: '/business', label: 'Business Dashboard' },
-  { to: '/business/profile', label: 'Company Profile' },
-  { to: '/business/tenders/new', label: 'Create Tender' },
+  { to: '/tenders', label: 'Open tenders' },
+  { to: '/business', label: 'My tenders' },
+  { to: '/business/tenders/new', label: 'Post a tender' },
+  { to: '/business/profile', label: 'Company profile' },
 ];
 const supplierLinks: NavigationLink[] = [
-  { to: '/', label: 'Homepage' },
-  { to: '/tenders', label: 'Current Tenders' },
-  { to: '/supplier', label: 'Supplier Dashboard' },
-  { to: '/supplier/profile', label: 'Supplier Profile' },
-  { to: '/subscription', label: 'Subscription' },
+  { to: '/tenders', label: 'Open tenders' },
+  { to: '/supplier', label: 'My bids' },
+  { to: '/supplier/profile', label: 'Supplier profile' },
 ];
 
 function todayInJamaica(): string {
@@ -32,12 +29,14 @@ function todayInJamaica(): string {
 
 /** The page chrome every screen shares, in the original site's markup and classes. */
 function SiteFrame({ links, brandAside, children }: { links: NavigationLink[]; brandAside: ReactNode; children: ReactNode }) {
+  const { profile, staffRole } = useAccount();
+  const allLinks = staffRole ? [...links, { to: '/admin', label: 'Admin' }] : links;
   return (
     <>
       <div className="topbar">
         <div className="wrap">
           <span>Caribbean Tender Procurement Marketplace</span>
-          <span>Assistance: support@example.com</span>
+          <span>Assistance: {supportEmail}</span>
         </div>
       </div>
       <header className="brandbar">
@@ -55,7 +54,7 @@ function SiteFrame({ links, brandAside, children }: { links: NavigationLink[]; b
       <nav className="nav" aria-label="Main">
         <div className="wrap">
           <ul>
-            {links.map((link) => (
+            {allLinks.map((link) => (
               <li key={link.to}>
                 <NavLink to={link.to} end>
                   {link.label}
@@ -68,10 +67,16 @@ function SiteFrame({ links, brandAside, children }: { links: NavigationLink[]; b
       </nav>
       <main className="wrap">
         {configurationProblem && <Notice tone="error">{configurationProblem}</Notice>}
+        {profile && !profile.is_active && (
+          <Notice tone="error">This account has been deactivated, so you can look but not post, bid or upload. Contact {supportEmail} for help.</Notice>
+        )}
         {children}
       </main>
       <footer className="footer">
-        <div className="wrap">© {new Date().getFullYear()} CaribbeanTender. Electronic tendering for private-sector businesses and suppliers.</div>
+        <div className="wrap">
+          © {new Date().getFullYear()} CaribbeanTender ·{' '}
+          <Link to="/about">About us</Link> · <Link to="/privacy">Privacy Policy</Link> · <Link to="/terms">Terms of Service</Link>
+        </div>
       </footer>
     </>
   );
@@ -81,10 +86,11 @@ function SiteFrame({ links, brandAside, children }: { links: NavigationLink[]; b
 export function PublicLayout() {
   const { session, businessProfile, supplierProfile, signOut } = useAccount();
   const navigate = useNavigate();
-  const links: NavigationLink[] = [{ to: '/', label: 'Homepage' }, { to: '/tenders', label: 'Current Tenders' }];
-  if (businessProfile) links.push({ to: '/business', label: 'Business Dashboard' });
-  if (supplierProfile) links.push({ to: '/supplier', label: 'Supplier Dashboard' });
-  if (!session) links.push({ to: '/register', label: 'Register' }, { to: '/login', label: 'Login' });
+  const links: NavigationLink[] = [{ to: '/', label: 'Home' }, { to: '/about', label: 'About us' }];
+  if (session) links.push({ to: '/tenders', label: 'Open tenders' });
+  if (businessProfile) links.push({ to: '/business', label: 'My tenders' });
+  if (supplierProfile) links.push({ to: '/supplier', label: 'My bids' });
+  if (!session) links.push({ to: '/register', label: 'Sign up' }, { to: '/login', label: 'Sign in' });
 
   const brandAside = session ? (
     <button
@@ -99,8 +105,8 @@ export function PublicLayout() {
     </button>
   ) : (
     <>
-      <Link className="btn gold" to="/register">Register</Link>{" "}
-      <Link className="btn" to="/login">Log in</Link>
+      <Link className="btn gold" to="/register">Sign up</Link>{' '}
+      <Link className="btn" to="/login">Sign in</Link>
     </>
   );
 
@@ -210,4 +216,17 @@ export function AccountLayout({ accountType }: { accountType: AccountType }) {
       </RequireAccount>
     </SiteFrame>
   );
+}
+
+/** Sends visitors who aren't signed in to the sign-in page, then back (PRD P1-04: browsing needs an account). */
+export function RequireSignIn({ children }: { children: ReactNode }) {
+  const { session, isLoading } = useAccount();
+  const location = useLocation();
+  if (isLoading) {
+    return <Loading />;
+  }
+  if (!session) {
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+  return <>{children}</>;
 }

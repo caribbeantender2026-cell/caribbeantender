@@ -2,9 +2,11 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types.ts';
 
-const productionProjectRef = 'ijlcjthgwppllhlqocep';
 const supabaseUrl: string = import.meta.env.VITE_SUPABASE_URL ?? '';
 const publishableKey: string = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
+
+/** Where people get help, for example when a trial has ended (OPEN_QUESTIONS.md, item 12). */
+export const supportEmail: string = import.meta.env.VITE_SUPPORT_EMAIL || 'support@caribbeantender.com';
 
 /** True when a key is a legacy service-role JWT, which bypasses every security rule. */
 function isServiceRoleJwt(key: string): boolean {
@@ -27,10 +29,6 @@ function findConfigurationProblem(): string | null {
   }
   if (publishableKey.startsWith('sb_secret_') || isServiceRoleJwt(publishableKey)) {
     return 'VITE_SUPABASE_PUBLISHABLE_KEY holds a secret key, which must never reach a browser. Replace it with the publishable key and rotate the secret key.';
-  }
-  // The live project still has the old schema; during development this app must use staging.
-  if (import.meta.env.DEV && supabaseUrl.includes(productionProjectRef)) {
-    return 'VITE_SUPABASE_URL points at the production project, which does not have the new database schema yet. Use the staging project.';
   }
   return null;
 }

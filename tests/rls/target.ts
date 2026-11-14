@@ -1,5 +1,5 @@
 /**
- * The real Supabase stack the RLS suite runs against (the local stack or staging), and the test
+ * The real Supabase stack the RLS suite runs against (the local stack or the client project), and the test
  * accounts it uses. This drives the real API, Storage, Auth and pg_cron, which the PGlite pre-check
  * in tests/database cannot. Against the client's project it runs only when the runner says so, and only
  * the after-state suite (OPEN_QUESTIONS.md, decision D1): every account it creates is named

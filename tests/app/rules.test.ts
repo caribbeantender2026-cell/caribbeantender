@@ -20,11 +20,14 @@ test('Other statuses map directly to their phase', () => {
 });
 
 test('Supplier access follows the same rule as the database', () => {
-  assert.equal(supplierHasAccess({ status: 'trialing', trial_ends_at: later, current_period_ends_at: null }, now), true);
-  assert.equal(supplierHasAccess({ status: 'trialing', trial_ends_at: earlier, current_period_ends_at: null }, now), false);
-  assert.equal(supplierHasAccess({ status: 'active', trial_ends_at: null, current_period_ends_at: later }, now), true);
-  assert.equal(supplierHasAccess({ status: 'active', trial_ends_at: null, current_period_ends_at: null }, now), false, 'active with no paid-up period');
-  assert.equal(supplierHasAccess({ status: 'expired', trial_ends_at: later, current_period_ends_at: later }, now), false);
+  assert.equal(supplierHasAccess({ status: 'trial', trial_ends_at: later, current_period_end: null }, now), true);
+  assert.equal(supplierHasAccess({ status: 'trial', trial_ends_at: earlier, current_period_end: null }, now), false);
+  assert.equal(supplierHasAccess({ status: 'trial', trial_ends_at: null, current_period_end: null }, now), false, 'trial with no end date');
+  assert.equal(supplierHasAccess({ status: 'active', trial_ends_at: null, current_period_end: later }, now), true);
+  assert.equal(supplierHasAccess({ status: 'active', trial_ends_at: null, current_period_end: earlier }, now), false, 'paid period over');
+  assert.equal(supplierHasAccess({ status: 'active', trial_ends_at: null, current_period_end: null }, now), true, 'active with no end date counts as active');
+  assert.equal(supplierHasAccess({ status: 'expired', trial_ends_at: later, current_period_end: later }, now), false);
+  assert.equal(supplierHasAccess({ status: 'cancelled', trial_ends_at: later, current_period_end: later }, now), false);
   assert.equal(supplierHasAccess(null, now), false);
 });
 

@@ -13,12 +13,13 @@ const maximumNameLength = 120;
 
 const registerSchema = z
   .object({
-    fullName: z.string().trim().min(2, 'Enter your full name (at least 2 characters).').max(maximumNameLength, `Use at most ${maximumNameLength} characters.`),
+    fullName: z.string().trim().min(1, 'Enter your full name.').max(maximumNameLength, `Use at most ${maximumNameLength} characters.`),
     email: z.email('Enter a valid email address.'),
     confirmEmail: z.string(),
     password: z.string().min(minimumPasswordLength, `Use at least ${minimumPasswordLength} characters.`),
     confirmPassword: z.string(),
     accountType: z.enum(['business', 'supplier'], { message: 'Choose Business or Supplier.' }),
+    acceptedTerms: z.literal(true, { message: 'Agree to the Terms of Service and Privacy Policy to create an account.' }),
   })
   .refine((values) => values.email.trim().toLowerCase() === values.confirmEmail.trim().toLowerCase(), {
     path: ['confirmEmail'],
@@ -52,7 +53,8 @@ export function RegisterPage() {
       email: values.email.trim(),
       password: values.password,
       options: {
-        data: { full_name: values.fullName, account_type: values.accountType },
+        // The signup trigger records accepted_terms_at from this (PRD P1-01).
+        data: { full_name: values.fullName, account_type: values.accountType, accepted_terms: true },
         emailRedirectTo: `${window.location.origin}/login`,
       },
     });
@@ -108,6 +110,12 @@ export function RegisterPage() {
           <option value="supplier">Supplier</option>
         </select>
         {errors.accountType && <div className="match-error">{errors.accountType.message}</div>}
+
+        <label className="checkbox" htmlFor="acceptedTerms">
+          <input id="acceptedTerms" type="checkbox" {...form.register('acceptedTerms')} />
+          I agree to the <Link to="/terms" target="_blank">Terms of Service</Link> and <Link to="/privacy" target="_blank">Privacy Policy</Link>
+        </label>
+        {errors.acceptedTerms && <div className="match-error">{errors.acceptedTerms.message}</div>}
 
         {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
         <div className="actions">

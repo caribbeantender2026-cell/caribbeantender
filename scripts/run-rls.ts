@@ -1,7 +1,7 @@
 /**
- * Runs the real-stack RLS proof (PRD section 11) against the local Supabase stack, staging, or the
- * client's project:
- *   1. local and staging only: reset the database to the production baseline and run
+ * Runs the real-stack RLS proof (PRD section 11) against the local Supabase stack or the client's
+ * project (staging was dropped by decision D1):
+ *   1. local only: reset the database to the production baseline and run
  *      tests/rls/baseline.test.ts (every audit item must reproduce), then apply the remaining migrations;
  *   2. run tests/rls/rls.test.ts (every item must be refused);
  *   3. live only: remove every rls-test-<run id> account, row and file, then export the row counts and
@@ -11,7 +11,6 @@
  *
  * Usage:
  *   node scripts/run-rls.ts local
- *   node --env-file=.env.staging.local scripts/run-rls.ts staging --reset-staging
  *   node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only backups/2026-11-13
  *
  * The live run never resets or migrates: the client project already has every migration
@@ -32,7 +31,7 @@ const productionVersions: Record<string, string> = {
   timezone: 'UTC',
 };
 
-type Target = 'local' | 'staging' | 'live';
+type Target = 'local' | 'live';
 
 function fail(message: string): never {
   console.error(`\n${message}`);
@@ -40,13 +39,10 @@ function fail(message: string): never {
 }
 
 const requestedTarget = process.argv[2];
-if (requestedTarget !== 'local' && requestedTarget !== 'staging' && requestedTarget !== 'live') {
-  fail('Say which stack to run against: "local", "staging" or "live".');
+if (requestedTarget !== 'local' && requestedTarget !== 'live') {
+  fail('Say which stack to run against: "local" or "live".');
 }
 const target: Target = requestedTarget;
-if (target === 'staging' && !process.argv.includes('--reset-staging')) {
-  fail('The staging run resets the staging database to the baseline and back, deleting its data. Add --reset-staging to confirm.');
-}
 const backupFolder = process.argv[4] ?? '';
 if (target === 'live' && (process.argv[3] !== '--after-state-only' || !existsSync(`${backupFolder}/counts.json`))) {
   fail('The live run creates rls-test-<run id> data on the client project and removes it afterwards (OPEN_QUESTIONS.md, D1). '
@@ -54,14 +50,10 @@ if (target === 'live' && (process.argv[3] !== '--after-state-only' || !existsSyn
 }
 const runIdentifier = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
 
-/**
- * Runs the Supabase CLI. Staging calls carry the staging database password and live calls a placeholder
- * (they only use the Management API), so the CLI never creates a login role on either project.
- */
+/** Runs the Supabase CLI. Live calls carry a placeholder password (they only use the Management API), so the CLI never creates a login role. */
 function supabase(cliArguments: string[], options: { allowFailure?: boolean } = {}): string {
   const passwords: Record<Target, Record<string, string>> = {
     local: {},
-    staging: { SUPABASE_DB_PASSWORD: process.env.STAGING_DB_PASSWORD ?? '' },
     live: { SUPABASE_DB_PASSWORD: 'not-used-by-management-api' },
   };
   const result = runSupabase(cliArguments, passwords[target]);
@@ -93,27 +85,6 @@ function connectToLocal(): Connection {
     publishableKey: value('PUBLISHABLE_KEY') || value('ANON_KEY'),
     secretKey: value('SECRET_KEY') || value('SERVICE_ROLE_KEY'),
     locationFlag: '--local',
-  };
-}
-
-function connectToStaging(): Connection {
-  const projectRef = process.env.STAGING_PROJECT_REF ?? '';
-  const url = process.env.STAGING_SUPABASE_URL ?? '';
-  if (!/^[a-z]{20}$/.test(projectRef)) fail('STAGING_PROJECT_REF is missing or not a project ref. Fill in .env.staging.local.');
-  if (projectRef === productionProjectRef || url.includes(productionProjectRef)) fail('Refusing to run: the staging settings point at production.');
-  if (!url.includes(projectRef)) fail('STAGING_SUPABASE_URL does not match STAGING_PROJECT_REF.');
-  if (!process.env.STAGING_DB_PASSWORD) fail('STAGING_DB_PASSWORD is empty; the CLI needs it to reset and migrate staging.');
-
-  if (readLinkFile('project-ref') !== projectRef) {
-    supabase(['link', '--project-ref', projectRef]);
-  }
-  const linked = readLinkFile('project-ref');
-  if (linked !== projectRef || linked === productionProjectRef) fail(`The CLI is linked to "${linked}", not staging. Stopping.`);
-  return {
-    url,
-    publishableKey: process.env.STAGING_SUPABASE_PUBLISHABLE_KEY ?? '',
-    secretKey: process.env.STAGING_SUPABASE_SECRET_KEY ?? '',
-    locationFlag: '--linked',
   };
 }
 
@@ -176,7 +147,7 @@ function compareCounts(beforeFolder: string, afterFolder: string): string {
   return `| Table | Backup | After the run | |\n|---|---|---|---|\n${rows.join('\n')}`;
 }
 
-const connectors: Record<Target, () => Connection> = { local: connectToLocal, staging: connectToStaging, live: connectToLive };
+const connectors: Record<Target, () => Connection> = { local: connectToLocal, live: connectToLive };
 const connection = connectors[target]();
 if (!connection.url || !connection.publishableKey || !connection.secretKey) {
   fail('Could not find the API URL and keys for this stack.');
@@ -189,7 +160,7 @@ if (target !== 'live') {
   baselineRun = runSuite('tests/rls/baseline.test.ts', connection);
 
   console.log(`\nApplying every later migration to ${target}...`);
-  supabase(target === 'local' ? ['migration', 'up', '--local'] : ['db', 'push', '--linked', '--include-all', '--yes']);
+  supabase(['migration', 'up', '--local']);
 }
 
 console.log(`\nRunning the after-state suite on ${target} (run ${runIdentifier})...`);

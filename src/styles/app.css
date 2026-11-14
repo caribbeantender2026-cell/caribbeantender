@@ -185,13 +185,6 @@ a:hover {
 }
 
 /* Layout */
-.grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
 .card {
   background: var(--white);
   border: 1px solid var(--border);
@@ -306,18 +299,6 @@ button:disabled {
   gap: 18px;
 }
 
-.stat {
-  background: var(--white);
-  border: 1px solid var(--border);
-  padding: 20px;
-}
-
-.stat strong {
-  display: block;
-  font-size: 30px;
-  color: var(--blue);
-}
-
 /* Small Elements */
 .badge {
   display: inline-block;
@@ -339,10 +320,6 @@ button:disabled {
 .small {
   font-size: 13px;
   color: var(--muted);
-}
-
-.hidden {
-  display: none;
 }
 
 /* Footer */
@@ -429,7 +406,6 @@ button:disabled {
 /* Mobile */
 @media (max-width: 800px) {
   .hero,
-  .grid,
   .dashboard {
     grid-template-columns: 1fr;
   }
@@ -568,36 +544,6 @@ button:disabled {
   }
 }
 
-.subscription-card {
-    margin-bottom: 20px;
-}
-
-.trial-active {
-    padding: 18px;
-    border-left: 5px solid #d4a017;
-    background: #fffaf0;
-}
-
-.trial-active h2 {
-    margin: 8px 0;
-}
-
-.subscription-active {
-    padding: 18px;
-    border-left: 5px solid var(--success);
-    background: #f0fff4;
-}
-
-.trial-expired {
-    padding: 18px;
-    border-left: 5px solid var(--danger);
-    background: #fff5f5;
-}
-
-.subscription-card .btn {
-    margin-top: 10px;
-}
-
 /* Tender lifecycle badges */
 .badge.draft { background: #eef2f7; color: var(--muted); }
 .badge.open { background: #eaf8ef; color: #216e39; }
@@ -608,3 +554,24 @@ button:disabled {
 
 /* Plain text that keeps the line breaks people typed */
 .preserve-lines { white-space: pre-line; }
+
+/* Bid outcomes, matching the tender badges. */
+.badge.submitted { background: #e8f0ff; color: var(--blue); }
+.badge.unsuccessful,
+.badge.tender_cancelled { background: #eef2f7; color: var(--muted); }
+
+/* Wide tables scroll sideways on phones instead of squeezing (PRD P1-16: 360px and up). */
+.table-scroll { overflow-x: auto; }
+
+.details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0; }
+.details dt { font-weight: 600; }
+.details dd { margin: 0; }
+
+/* A button that reads as a link, for actions inside lists (downloads, remove). */
+.link-button { background: none; border: 0; padding: 0; color: var(--blue); text-decoration: underline; cursor: pointer; font: inherit; }
+.link-button:disabled { color: var(--muted); cursor: wait; }
+
+.checkbox { display: flex; gap: 8px; align-items: flex-start; font-weight: normal; }
+.checkbox input { width: auto; margin-top: 4px; }
+
+.markdown h1 { margin-top: 0; }

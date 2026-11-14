@@ -87,14 +87,19 @@ async function submitBid(bidder: TestAccount, tenderId: string, amount: number, 
   return { bidId, data: data as string | null, error };
 }
 
-/** What the Edge Function does in Stage 2: check and log as the user, then sign for 60 seconds as the service role. */
+/** Downloads as the app does: the download-document Edge Function checks and logs as the user, then signs for 60 seconds. */
 async function downloadAs(account: TestAccount, documentId: string): Promise<{ text: string | null; error: string | null }> {
-  const requested = await account.client.rpc('request_document_download', { document_id: documentId });
-  if (requested.error) return { text: null, error: requested.error.message };
-  const location = requested.data as { bucket: string; path: string };
-  const signed = await adminClient.storage.from(location.bucket).createSignedUrl(location.path, signedUrlLifetimeSeconds);
-  if (signed.error || !signed.data) return { text: null, error: signed.error?.message ?? 'no URL' };
-  const response = await fetch(signed.data.signedUrl);
+  const { data, error } = await account.client.functions.invoke<{ url: string }>('download-document', { body: { document_id: documentId } });
+  if (error) {
+    const body = error.context instanceof Response ? ((await error.context.json().catch(() => null)) as { error?: string } | null) : null;
+    return { text: null, error: body?.error ?? error.message };
+  }
+  const signedUrl = new URL(data?.url ?? '');
+  // The link must die within a minute (PRD 8.5); a Storage signed URL carries its expiry in the token.
+  const token = signedUrl.searchParams.get('token') ?? '';
+  const claims = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as { exp: number; iat: number };
+  assert.ok(claims.exp - claims.iat <= signedUrlLifetimeSeconds, `link lifetime ${claims.exp - claims.iat} s`);
+  const response = await fetch(signedUrl);
   return { text: await response.text(), error: null };
 }
 

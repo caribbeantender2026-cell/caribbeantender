@@ -14,9 +14,9 @@
     "test": "node --test \"tests/app/**/*.test.ts\" \"tests/functions/**/*.test.ts\"",
     "test:database": "node --test --test-concurrency=1 \"tests/database/**/*.test.ts\"",
     "test:database:before-after": "node tests/database/before-after.ts",
-    "types:local": "node scripts/generate-database-types.ts",
+    "types": "node scripts/generate-database-types.ts",
     "test:rls:local": "node scripts/run-rls.ts local",
-    "test:rls:staging": "node --env-file=.env.staging.local scripts/run-rls.ts staging --reset-staging"
+    "test:rls:live": "node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only backups/2026-11-13"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
@@ -36,6 +36,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "7.89.0",
+    "react-markdown": "10.1.0",
     "react-router": "8.4.0",
     "zod": "4.6.5"
   }
