@@ -27,6 +27,9 @@ Last updated: 13 November 2026 (Stage 1).
 31. **TOTP on the client's project.** The admin tests enrol an authenticator factor, so TOTP MFA must be enabled.
     *Answered:* it is. The live run on 13 November 2026 enrolled and verified a factor (`tests/rls/runs/`). The client's owner should keep it on (DEPLOY.md step 6).
 
+32. **Length of the go-live trial.** None of the 6 existing suppliers can bid today (4 expired, 2 with trials that ended in October). At go-live a one-off migration gives every existing supplier a fresh trial (DEPLOY.md step 10).
+    *Default:* 14 days from go-live. Tevin confirms with the client.
+
 ## Decisions that change the PRD
 
 - **D1 (Tevin, 13 November 2026): work directly on the client's Supabase project.** No staging and no Docker. Stage 1 is applied to and tested on the client's project (`ijlcjthgwppllhlqocep`), which isn't live yet; Tevin accepts the risk. This **replaces PRD hard rule 1** ("never connect to the production project") and the staging plan (PRD 9.3, OPEN_QUESTIONS items 1, 3 and 4). Limits that still apply on that project:
@@ -38,6 +41,8 @@ Last updated: 13 November 2026 (Stage 1).
   - test accounts are named `rls-test-<run id>`, created already confirmed, and deleted afterwards with all their rows and files.
 
 - **D2 (Tevin, 13 November 2026): suppliers with no subscription status become expired.** Four suppliers on the client's project were created (4 August to 10 September) before trials existed, have no status and no trial dates, and can't bid today. The subscriptions migration copies them as `expired`, so nobody gains or loses access; any other unknown status still stops the migration.
+
+- **D3 (Tevin, 13 November 2026): no email to real users before go-live.** Every Edge Function sends through `supabase/functions/_shared/email.ts`, which checks the `EMAIL_ALLOWLIST` setting. An address outside it is logged in `email_log` as `suppressed` and not sent. One change to the wording asked for: at go-live the setting becomes `*` rather than being removed, because a missing or empty setting sends nothing (safety first, CLAUDE.md precedence 1). Push from this clone is disabled (`git remote set-url --push origin DISABLED`), because the repo is public and `.env.production.local` holds the live secret key.
 
 ## Resolved (Tevin, 13 November 2026)
 

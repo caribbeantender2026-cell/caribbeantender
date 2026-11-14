@@ -11,7 +11,7 @@
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.node.json",
-    "test": "node --test \"tests/app/**/*.test.ts\"",
+    "test": "node --test \"tests/app/**/*.test.ts\" \"tests/functions/**/*.test.ts\"",
     "test:database": "node --test --test-concurrency=1 \"tests/database/**/*.test.ts\"",
     "test:database:before-after": "node tests/database/before-after.ts",
     "types:local": "node scripts/generate-database-types.ts",

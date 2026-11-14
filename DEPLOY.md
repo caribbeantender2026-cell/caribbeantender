@@ -106,6 +106,38 @@ Tevin's Developer role can't change these. "Now" is what the project showed on 2
 - **Security Advisor:** **zero errors** (PRD 8.9). Expected warnings: the intended remote procedures (`submit_bid`, `publish_tender`, `admin_*`, …) are security-definer functions callable by signed-in users, which is how the PRD wants them; each checks the caller itself.
 - **Smoke tests:** Stage 5 adds these.
 
-## 9. Rollback
+## 9. Email safety until go-live (OPEN_QUESTIONS.md, D3)
+
+Before **any** Edge Function that sends email is deployed, set the allowlist to the test inboxes only:
+
+```powershell
+supabase secrets set EMAIL_ALLOWLIST="<test inbox 1>,<test inbox 2>" --project-ref <production ref>
+```
+
+An email to any other address is recorded in `email_log` as `suppressed` and never sent, so publishing a test tender can't email a real supplier. If the setting is missing or empty, **nothing** is sent: a function deployed before its setting, or a setting deleted by mistake, can't email anyone.
+
+## 10. Go-live
+
+Run these in order on go-live day, after the new frontend is live.
+
+1. **Fresh supplier trials** (OPEN_QUESTIONS.md, item 32: confirm the 14 days with the client first). None of the 6 existing suppliers could bid on 2026-11-13. This gives every existing supplier a trial ending 14 days after go-live; a paid subscription that is still running is left alone. It is a migration, never run by hand:
+   ```powershell
+   # <go-live timestamp>: go-live day as YYYYMMDDHHMMSS, later than every file in supabase/migrations.
+   Copy-Item supabase/go-live/fresh_supplier_trials.sql supabase/migrations/<go-live timestamp>_fresh_supplier_trials.sql
+   git add supabase/migrations; git commit -m "Go-live: fresh supplier trials"
+   supabase db push --linked --dry-run   # must list only this migration
+   supabase db push --linked
+   ```
+   Check that every supplier can bid; this must return `0`:
+   ```sql
+   select count(*) from public.supplier_profiles supplier where not private.supplier_has_access(supplier.user_id);
+   ```
+2. **Turn on email for everyone:**
+   ```powershell
+   supabase secrets set EMAIL_ALLOWLIST="*" --project-ref <production ref>
+   ```
+   This replaces the allowlist rather than deleting the setting, because an empty or missing setting sends nothing (step 9). Emails suppressed before go-live stay suppressed, so nobody gets a backlog of test-period emails.
+
+## 11. Rollback
 
 Restore the backup from step 1 (point-in-time recovery to just before step 4, or the logical dump), then restore the Site URL. Stage 5 adds the frontend and Edge Function rollback.

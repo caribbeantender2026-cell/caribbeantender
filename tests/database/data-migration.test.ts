@@ -181,6 +181,25 @@ test('Existing bids survive with a submission time; the closed tender opens, the
   assert.match(sealed.error?.message ?? '', /sealed until/);
 });
 
+// Runs last in this file: it changes the subscriptions the tests above read.
+test('Go-live: every existing supplier gets a fresh 14-day trial; a running paid subscription is kept', async () => {
+  await applyMigration(database, '../go-live/fresh_supplier_trials.sql');
+  const result = await database.query<{ supplier_id: string; status: string; trial_ends_at: Date | null; current_period_end: Date | null; has_access: boolean }>(
+    `select supplier_id, status::text as status, trial_ends_at, current_period_end, private.supplier_has_access(supplier_id) as has_access from public.subscriptions`,
+  );
+  const bySupplier = new Map(result.rows.map((row) => [row.supplier_id, row]));
+  for (const supplierId of [trialSupplierId, statuslessSupplierId]) {
+    const row = bySupplier.get(supplierId);
+    assert.equal(row?.status, 'trial');
+    assert.equal(row?.has_access, true);
+    const daysLeft = ((row?.trial_ends_at?.getTime() ?? 0) - Date.now()) / millisecondsPerDay;
+    assert.ok(daysLeft > 13.99 && daysLeft <= 14, `trial days left: ${daysLeft}`);
+  }
+  const paid = bySupplier.get(paidSupplierId);
+  assert.equal(paid?.status, 'active');
+  assert.equal(paid?.current_period_end?.toISOString(), '2027-01-31T00:00:00.000Z');
+});
+
 test('The migration stops, rather than guessing, when a subscription status is unknown', async () => {
   const strayDatabase = await createDatabase(baselineMigrations);
   const strayUserId = randomUUID();
