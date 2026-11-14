@@ -7,7 +7,10 @@ import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
+import { FormFields, useFormDefinition } from '../../components/FormFields.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
+import type { Json } from '../../lib/database.types.ts';
+import { formProblems, type FormData } from '../../lib/forms.ts';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, bidDocumentPath, checkDocument } from '../../lib/documents.ts';
 import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
 import { supplierHasAccess, tenderPhase } from '../../lib/rules.ts';
@@ -47,6 +50,12 @@ export function SubmitBidPage() {
   // One id for this bid, chosen here so its files can be uploaded into its folder before it exists.
   const [bidId] = useState(() => crypto.randomUUID());
   const uploadedPaths = useRef(new Set<string>());
+  const proposalDefinitionQuery = useFormDefinition('supplier-proposal');
+  // The proposal is a file, or the supplier proposal form filled in online (PRD P1-08).
+  const [proposalMode, setProposalMode] = useState<'file' | 'online'>('file');
+  const [proposalData, setProposalData] = useState<FormData>({});
+  // Saved once, then updated on a retry, so a failed submission never leaves duplicate forms behind.
+  const proposalSubmissionId = useRef<string | null>(null);
   const [amountText, setAmountText] = useState('');
   const [proposal, setProposal] = useState<File | null>(null);
   const [supportingFiles, setSupportingFiles] = useState<File[]>([]);
@@ -72,19 +81,51 @@ export function SubmitBidPage() {
     uploadedPaths.current.add(path);
   }
 
+  /** Saves the online proposal form, unattached; submit_bid attaches it and locks it. */
+  async function saveProposalForm(): Promise<string> {
+    if (proposalSubmissionId.current) {
+      const updated = await supabase.from('form_submissions').update({ data: proposalData as Json }).eq('id', proposalSubmissionId.current);
+      if (updated.error) throw updated.error;
+      return proposalSubmissionId.current;
+    }
+    const inserted = await supabase
+      .from('form_submissions')
+      .insert({ form_key: 'supplier-proposal', form_version: proposalDefinitionQuery.data?.version ?? 1, owner_id: supplierId, data: proposalData as Json })
+      .select('id')
+      .single();
+    if (inserted.error) throw inserted.error;
+    proposalSubmissionId.current = inserted.data.id;
+    return inserted.data.id;
+  }
+
   async function submit() {
     setProblem(null);
     const amount = Number(amountText);
     if (!amountPattern.test(amountText.trim()) || !(amount > 0) || amount >= maximumAmount) {
       return setProblem('Enter a bid amount above zero, with at most two decimal places.');
     }
-    if (!proposal) return setProblem('Attach your proposal.');
+    const proposalSchema = proposalDefinitionQuery.data?.parsedSchema;
+    if (proposalMode === 'file' && !proposal) return setProblem('Attach your proposal.');
+    if (proposalMode === 'online') {
+      const problems = formProblems(proposalSchema ?? { fields: [] }, proposalData, true);
+      if (!proposalSchema || problems.length > 0) return setProblem(problems.join(' ') || 'The proposal form is not available.');
+    }
     if (!window.confirm(`Submit a bid of ${formatAmount(amount)}? Bids can't be changed after submission.`)) return;
     setIsSubmitting(true);
     try {
-      await uploadOnce(proposal, true);
+      let proposalFormId: string | undefined;
+      if (proposalMode === 'file' && proposal) {
+        await uploadOnce(proposal, true);
+      } else {
+        proposalFormId = await saveProposalForm();
+      }
       for (const file of supportingFiles) await uploadOnce(file, false);
-      const { error } = await supabase.rpc('submit_bid', { tender_id: tenderId, bid_id: bidId, amount });
+      const { error } = await supabase.rpc('submit_bid', {
+        tender_id: tenderId,
+        bid_id: bidId,
+        amount,
+        ...(proposalFormId ? { proposal_form_submission_id: proposalFormId } : {}),
+      });
       if (error) throw error;
       await queryClient.invalidateQueries({ queryKey: ['own-bid', tenderId, supplierId] });
       await queryClient.invalidateQueries({ queryKey: ['own-bids'] });
@@ -133,8 +174,27 @@ export function SubmitBidPage() {
             <input id="bidAmount" inputMode="decimal" value={amountText} onChange={(event) => setAmountText(event.target.value)} required />
           </div>
 
-          <label htmlFor="bidProposal">Proposal (required)</label>
-          <input id="bidProposal" type="file" accept={acceptedDocumentExtensions} onChange={(event) => setProposal(event.target.files?.[0] ?? null)} />
+          <fieldset>
+            <legend>Proposal (required)</legend>
+            <label className="checkbox" htmlFor="proposalFile">
+              <input id="proposalFile" type="radio" name="proposalMode" checked={proposalMode === 'file'} onChange={() => setProposalMode('file')} />
+              Upload my proposal
+            </label>
+            <label className="checkbox" htmlFor="proposalOnline">
+              <input id="proposalOnline" type="radio" name="proposalMode" checked={proposalMode === 'online'} onChange={() => setProposalMode('online')} />
+              Fill in the supplier proposal form online
+            </label>
+          </fieldset>
+          {proposalMode === 'file' ? (
+            <>
+              <label htmlFor="bidProposal">Proposal file</label>
+              <input id="bidProposal" type="file" accept={acceptedDocumentExtensions} onChange={(event) => setProposal(event.target.files?.[0] ?? null)} />
+            </>
+          ) : proposalDefinitionQuery.data ? (
+            <FormFields schema={proposalDefinitionQuery.data.parsedSchema} data={proposalData} onChange={setProposalData} idPrefix="proposal" />
+          ) : (
+            <Loading />
+          )}
 
           <label htmlFor="bidSupporting">Supporting documents (optional)</label>
           <input id="bidSupporting" type="file" multiple accept={acceptedDocumentExtensions} onChange={(event) => setSupportingFiles(Array.from(event.target.files ?? []))} />

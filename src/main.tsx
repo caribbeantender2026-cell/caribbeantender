@@ -48,6 +48,8 @@ const router = createBrowserRouter([
           { path: '/tenders', ...page(async () => (await import('./pages/TendersPage.tsx')).TendersPage) },
           { path: '/tenders/:tenderId', ...page(async () => (await import('./pages/TenderDetailsPage.tsx')).TenderDetailsPage) },
           { path: '/admin', ...page(async () => (await import('./pages/admin/AdminPage.tsx')).AdminPage) },
+          { path: '/forms', ...page(async () => (await import('./pages/FormsPage.tsx')).FormsPage) },
+          { path: '/forms/:formKey', ...page(async () => (await import('./pages/FormsPage.tsx')).FormFillPage) },
         ],
       },
       { path: '*', element: <LegacyRedirect /> },

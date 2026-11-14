@@ -575,3 +575,10 @@ button:disabled {
 .checkbox input { width: auto; margin-top: 4px; }
 
 .markdown h1 { margin-top: 0; }
+
+/* Read by screen readers, not shown. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* The onboarding tour: a dialog over the page, scrolling inside on small screens. */
+.tour-backdrop { position: fixed; inset: 0; background: rgb(13 42 85 / 55%); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+.tour { width: min(640px, 100%); max-height: 90vh; overflow-y: auto; }

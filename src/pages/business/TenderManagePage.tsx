@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DocumentList, type RecordedDocument } from '../../components/DocumentList.tsx';
+import { AttachedForm } from '../../components/FormFields.tsx';
+import type { FormData } from '../../lib/forms.ts';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { formatAmount } from '../../lib/queries.ts';
 import { tenderPhase, tenderPhaseDisplay } from '../../lib/rules.ts';
@@ -55,7 +57,10 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
           <DocumentList
             documents={(bid.documents as BidDocument[]).map((document) => ({ ...document, id: document.document_id }))}
           />
-          {bid.proposal_form !== null && <p className="small">Proposal form filled in online.</p>}
+          {bid.proposal_form !== null && (() => {
+            const proposal = bid.proposal_form as { form_key: string; form_version: number; data: FormData };
+            return <AttachedForm formKey={proposal.form_key} formVersion={proposal.form_version} data={proposal.data} notes={[`Proposal from ${bid.supplier_company_name || 'a supplier'}`]} />;
+          })()}
           {canAward && (
             <button type="button" className="btn gold" onClick={() => void award(bid.bid_id, bid.supplier_company_name || 'this supplier')}>
               Award to this bid
@@ -146,6 +151,14 @@ export function TenderManagePage() {
             <h3>Documents</h3>
             <DocumentList documents={tenderQuery.data.documents} />
           </>
+        )}
+        {tenderQuery.data.requirementsForm && (
+          <AttachedForm
+            formKey={tenderQuery.data.requirementsForm.form_key}
+            formVersion={tenderQuery.data.requirementsForm.form_version}
+            data={tenderQuery.data.requirementsForm.data as FormData}
+            notes={[`Requirements form for the tender "${tender.title}"`]}
+          />
         )}
         {problem && <Notice tone="error">{problem}</Notice>}
 

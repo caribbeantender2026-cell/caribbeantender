@@ -1,0 +1,90 @@
+// The forms engine's rules mirror private.form_data_problems, so the screen refuses what the database would.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { formProblems, grandTotal, lineTotal, readSchema, type FormSchema } from '../../src/lib/forms.ts';
+
+const proposal: FormSchema = {
+  fields: [
+    { name: 'deliverables', label: 'What will be delivered', type: 'textarea', required: true, maxLength: 20 },
+    { name: 'contact', label: 'Contact email', type: 'email' },
+    { name: 'start', label: 'Start date', type: 'date' },
+    {
+      name: 'cost_breakdown',
+      label: 'Cost breakdown',
+      type: 'table',
+      required: true,
+      columns: [
+        { name: 'item', label: 'Item', type: 'text', required: true },
+        { name: 'quantity', label: 'Quantity', type: 'number', required: true, minimum: 0 },
+        { name: 'unit_cost', label: 'Unit cost', type: 'number', required: true, minimum: 0 },
+        { name: 'labour', label: 'Labour', type: 'number', minimum: 0 },
+      ],
+      lineTotal: { label: 'Line total', multiply: ['quantity', 'unit_cost'], add: ['labour'] },
+    },
+  ],
+};
+const rule = proposal.fields[3]?.lineTotal ?? { label: '' };
+
+test('A complete, valid form has no problems', () => {
+  const data = { deliverables: 'Chairs', contact: 'sales@example.com', start: '2026-12-01', cost_breakdown: [{ item: 'Chair', quantity: 10, unit_cost: 2500, labour: 500 }] };
+  assert.deepEqual(formProblems(proposal, data, true), []);
+});
+
+test('Required fields and required cells are reported only when the form must be complete', () => {
+  const data = { cost_breakdown: [{ item: '', quantity: 1, unit_cost: null }] };
+  assert.deepEqual(formProblems(proposal, data, false), []);
+  assert.deepEqual(formProblems(proposal, data, true), [
+    'What will be delivered is required.',
+    'Row 1 of Cost breakdown: Item is required.',
+    'Row 1 of Cost breakdown: Unit cost is required.',
+  ]);
+});
+
+test('Wrong types, oversized text, bad emails and dates, negative and non-finite numbers are refused', () => {
+  const problems = formProblems(
+    proposal,
+    {
+      deliverables: 'x'.repeat(21),
+      contact: 'not an email',
+      start: '2026-02-30x',
+      cost_breakdown: [{ item: 'A', quantity: -1, unit_cost: Number.POSITIVE_INFINITY }, { item: 7 as unknown as string, quantity: '3' as unknown as number, unit_cost: 1 }],
+    },
+    true,
+  );
+  assert.deepEqual(problems, [
+    'What will be delivered must be at most 20 characters.',
+    'Contact email must be an email address.',
+    'Start date must be a date like 2026-11-30.',
+    'Row 1 of Cost breakdown: Quantity must be at least 0.',
+    'Row 1 of Cost breakdown: Unit cost must be a number.',
+    'Row 2 of Cost breakdown: Item must be text.',
+    'Row 2 of Cost breakdown: Quantity must be a number.',
+  ]);
+});
+
+test('Impossible calendar dates are refused, real ones accepted', () => {
+  const dateOnly: FormSchema = { fields: [{ name: 'start', label: 'Start date', type: 'date' }] };
+  for (const impossible of ['2026-02-30', '2026-13-01', '2026-00-10', '2025-02-29']) {
+    assert.deepEqual(formProblems(dateOnly, { start: impossible }, false), ['Start date must be a date like 2026-11-30.'], impossible);
+  }
+  assert.deepEqual(formProblems(dateOnly, { start: '2028-02-29' }, false), [], 'leap day');
+});
+
+test('A table must be a list of at most 200 rows', () => {
+  assert.deepEqual(formProblems(proposal, { cost_breakdown: 'rows' as unknown as [] }, false), ['Cost breakdown must be a list of rows.']);
+  const tooMany = Array.from({ length: 201 }, () => ({ item: 'A', quantity: 1, unit_cost: 1 }));
+  assert.deepEqual(formProblems(proposal, { cost_breakdown: tooMany }, false), ['Cost breakdown can have at most 200 rows.']);
+});
+
+test('Line totals multiply then add, empty cells count as zero, and the grand total sums them', () => {
+  assert.equal(lineTotal({ quantity: 10, unit_cost: 2500, labour: 500 }, rule), 25_500);
+  assert.equal(lineTotal({ quantity: 10, unit_cost: null, labour: 500 }, rule), 500);
+  assert.equal(grandTotal([{ quantity: 2, unit_cost: 3 }, { quantity: 1, unit_cost: 4, labour: 1 }], rule), 11);
+});
+
+test('A stored schema that is not a list of named fields becomes an empty form', () => {
+  for (const stored of [null, 'text', 42, {}, { fields: 'no' }]) {
+    assert.deepEqual(readSchema(stored).fields, []);
+  }
+  assert.equal(readSchema({ fields: [{ name: 'a', label: 'A', type: 'text' }, { label: 'no name' }, null] }).fields.length, 1);
+});

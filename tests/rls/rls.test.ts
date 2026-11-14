@@ -320,6 +320,16 @@ describe(`RLS suite (${supabaseUrl})`, () => {
     assert.equal(await canSignIn(otherBusiness.email), true, 'unbanned');
   });
 
+  test("P1-02: finishing the tour records it for that role, on the person's own profile only", async () => {
+    assert.equal((await supplier.client.rpc('record_onboarding_completed', { completed_account_type: 'supplier' })).error, null);
+    const own = await supplier.client.from('profiles').select('onboarding_completed').eq('id', supplier.userId).single();
+    assert.deepEqual(Object.keys(own.data?.onboarding_completed as object), ['supplier']);
+    const other = await adminClient.from('profiles').select('onboarding_completed').eq('id', otherSupplier.userId).single();
+    assert.deepEqual(other.data?.onboarding_completed, {}, 'nobody else');
+    const direct = await supplier.client.from('profiles').update({ onboarding_completed: {} }).eq('id', supplier.userId).select('id');
+    assert.ok(direct.error, 'only through the function');
+  });
+
   // After the main tender's closing time.
   test('A3: a bid at or after the closing time is refused', async () => {
     await waitUntilPast(tender.closesAt);

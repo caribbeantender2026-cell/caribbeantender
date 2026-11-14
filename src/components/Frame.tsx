@@ -1,10 +1,13 @@
 /** The site frame (top bar, brand, navigation, footer) and the layouts for public, business and supplier pages. */
-import { useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { createAccount, useAccount, type AccountType } from '../auth/AccountContext.tsx';
 import { configurationProblem, errorMessage, supportEmail } from '../lib/supabase.ts';
 import { jamaicaTimeZone } from '../lib/time.ts';
 import { Loading, Notice } from './Notices.tsx';
+
+// Loaded only when the tour opens, so it adds nothing to every other page.
+const Tour = lazy(async () => ({ default: (await import('./Tour.tsx')).Tour }));
 
 type NavigationLink = { to: string; label: string };
 
@@ -15,11 +18,13 @@ const businessLinks: NavigationLink[] = [
   { to: '/tenders', label: 'Open tenders' },
   { to: '/business', label: 'My tenders' },
   { to: '/business/tenders/new', label: 'Post a tender' },
+  { to: '/forms', label: 'Forms' },
   { to: '/business/profile', label: 'Company profile' },
 ];
 const supplierLinks: NavigationLink[] = [
   { to: '/tenders', label: 'Open tenders' },
   { to: '/supplier', label: 'My bids' },
+  { to: '/forms', label: 'Forms' },
   { to: '/supplier/profile', label: 'Supplier profile' },
 ];
 
@@ -119,7 +124,12 @@ export function PublicLayout() {
 
 /** "Signed in as" header with the account switcher and logout, as on the original dashboards. */
 function ProfileHeader({ accountType }: { accountType: AccountType }) {
-  const { session, businessProfile, supplierProfile, refreshAccounts, signOut } = useAccount();
+  const { session, profile: personProfile, businessProfile, supplierProfile, refreshAccounts, signOut } = useAccount();
+  // The tour opens by itself on a person's first visit as this account type, and from the button after that.
+  const [isTourRequested, setIsTourRequested] = useState(false);
+  const completedTours = personProfile?.onboarding_completed;
+  const hasSeenTour = typeof completedTours === 'object' && completedTours !== null && !Array.isArray(completedTours) && accountType in completedTours;
+  const isTourOpen = isTourRequested || (personProfile !== null && !hasSeenTour);
   const navigate = useNavigate();
   const [problem, setProblem] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -152,6 +162,7 @@ function ProfileHeader({ accountType }: { accountType: AccountType }) {
         </div>
         <div className="profile-actions">
           <Link to={dashboardPath[accountType]} className="btn">Dashboard</Link>
+          <button type="button" className="btn outline" onClick={() => setIsTourRequested(true)}>Take the tour</button>
           {hasOtherAccount ? (
             <Link to={dashboardPath[otherType]} className="btn outline">Switch to {accountLabel[otherType]}</Link>
           ) : (
@@ -172,6 +183,17 @@ function ProfileHeader({ accountType }: { accountType: AccountType }) {
         </div>
       </div>
       {problem && <Notice tone="error">{problem}</Notice>}
+      {isTourOpen && (
+        <Suspense fallback={null}>
+        <Tour
+          accountType={accountType}
+          onClose={() => {
+            setIsTourRequested(false);
+            void refreshAccounts();
+          }}
+        />
+        </Suspense>
+      )}
     </>
   );
 }

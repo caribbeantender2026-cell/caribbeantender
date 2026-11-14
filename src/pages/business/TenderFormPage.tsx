@@ -52,6 +52,25 @@ function useDraftFiles(tenderId: string) {
   return useQuery({ queryKey: ['draft-files', tenderId], enabled: tenderId !== '', queryFn: () => listDraftFiles(tenderId) });
 }
 
+/** Whether the draft has its requirements form filled in online, with a link to fill it in or edit it. */
+function OnlineRequirementsForm({ tenderId }: { tenderId: string }) {
+  const attachedQuery = useQuery({
+    queryKey: ['form-submission', 'business-requirements', tenderId, null],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('form_submissions').select('id').eq('attached_to_type', 'tender').eq('attached_to_id', tenderId).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  const isFilledIn = attachedQuery.data !== null && attachedQuery.data !== undefined;
+  return (
+    <p>
+      {isFilledIn ? 'Filled in online. ' : 'Fill it in online, or upload the completed form below. '}
+      <Link to={`/forms/business-requirements?tender=${tenderId}`}>{isFilledIn ? 'Edit the online form' : 'Fill in online'}</Link>
+    </p>
+  );
+}
+
 /** Upload and remove files in a draft's folder; publish_tender records them when the tender is published. */
 function DraftFiles({ tenderId }: { tenderId: string }) {
   const queryClient = useQueryClient();
@@ -108,6 +127,7 @@ function DraftFiles({ tenderId }: { tenderId: string }) {
       {filesQuery.isPending && <Loading />}
       {filesQuery.isError && <ErrorNotice error={filesQuery.error} />}
       <h4>Requirements form (required to publish)</h4>
+      <OnlineRequirementsForm tenderId={tenderId} />
       {filesQuery.data && fileRows(filesQuery.data.requirements)}
       <label htmlFor="requirementsUpload">Upload the completed requirements form</label>
       <input id="requirementsUpload" type="file" accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target.files, true)} />

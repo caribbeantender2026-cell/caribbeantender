@@ -4,6 +4,8 @@ import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { DocumentList } from '../../components/DocumentList.tsx';
+import { AttachedForm } from '../../components/FormFields.tsx';
+import type { FormData } from '../../lib/forms.ts';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import type { Enums } from '../../lib/database.types.ts';
 import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
@@ -26,17 +28,20 @@ function useOwnBids(supplierId: string) {
       const bids = await supabase.from('bids').select('id, tender_id, amount, currency, status, submitted_at').eq('supplier_id', supplierId).order('submitted_at', { ascending: false });
       if (bids.error) throw bids.error;
       const bidIds = bids.data.map((bid) => bid.id);
-      const [tenders, documents] = await Promise.all([
+      const [tenders, documents, forms] = await Promise.all([
         supabase.from('tenders').select('id, title, closes_at').in('id', bids.data.map((bid) => bid.tender_id)),
         supabase.from('bid_documents').select('id, bid_id, file_name, document_role, size_bytes').in('bid_id', bidIds).order('file_name'),
+        supabase.from('form_submissions').select('attached_to_id, form_key, form_version, data').eq('attached_to_type', 'bid').in('attached_to_id', bidIds),
       ]);
       if (tenders.error) throw tenders.error;
       if (documents.error) throw documents.error;
+      if (forms.error) throw forms.error;
       const titles = new Map(tenders.data.map((tender) => [tender.id, tender.title]));
       return bids.data.map((bid) => ({
         ...bid,
         tenderTitle: titles.get(bid.tender_id) ?? 'Tender',
         documents: documents.data.filter((document) => document.bid_id === bid.id),
+        proposalForm: forms.data.find((form) => form.attached_to_id === bid.id) ?? null,
       }));
     },
   });
@@ -81,6 +86,9 @@ export function SupplierDashboardPage() {
               <span className={`badge ${bid.status}`}>{bidStatusLabels[bid.status]}</span>
             </p>
             <DocumentList documents={bid.documents} />
+            {bid.proposalForm && (
+              <AttachedForm formKey={bid.proposalForm.form_key} formVersion={bid.proposalForm.form_version} data={bid.proposalForm.data as FormData} notes={[`Proposal for "${bid.tenderTitle}"`]} />
+            )}
           </div>
         ))}
       </div>
