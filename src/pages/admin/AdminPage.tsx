@@ -96,8 +96,12 @@ function Users() {
   async function setActive(userId: string, isActive: boolean, name: string) {
     setProblem(null);
     if (!window.confirm(`${isActive ? 'Reactivate' : 'Deactivate'} ${name}?`)) return;
-    const { error } = await supabase.rpc('admin_set_user_active', { user_id: userId, is_active: isActive });
-    if (error) return setProblem(errorMessage(error));
+    // The Edge Function records the change as this admin, then bans or unbans the account in Auth.
+    const { error } = await supabase.functions.invoke('set-user-active', { body: { user_id: userId, is_active: isActive } });
+    if (error) {
+      const detail = error.context instanceof Response ? ((await error.context.json().catch(() => null)) as { error?: string } | null)?.error : null;
+      setProblem(detail ?? errorMessage(error));
+    }
     await queryClient.invalidateQueries({ queryKey: ['admin-users'] });
   }
 

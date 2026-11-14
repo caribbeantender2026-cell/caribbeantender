@@ -1,6 +1,6 @@
 /**
  * Removes everything one RLS run created on the linked project: the rls-test-<run id> accounts and their
- * tenders, bids, documents, forms, files and audit entries (OPEN_QUESTIONS.md, decision D1). Real data is
+ * tenders, bids, documents, forms, files, audit entries and email log entries (OPEN_QUESTIONS.md, decision D1). Real data is
  * never touched: every row is selected through the run's test accounts.
  *
  * Bids and documents are write-once and the audit log is append-only, so their protecting triggers are
@@ -86,6 +86,8 @@ queryLinked(`
 begin;
 ${disableTriggers}
 delete from public.audit_log where actor_id = any(${users}) or entity_id = any(${entities});
+-- Emails about test bids and tenders, including suppressed alerts to real suppliers in the category.
+delete from public.email_log where recipient like '${emailPattern}' or entity_id = any(${entities});
 delete from public.bid_documents where bid_id = any(${bids});
 delete from public.tender_documents where tender_id = any(${tenders});
 delete from public.form_submissions where owner_id = any(${users});
@@ -110,6 +112,7 @@ const leftovers = queryLinked<{ what: string; remaining: number }>(`
   union all select 'tenders', count(*)::integer from public.tenders where id = any(${tenders})
   union all select 'bids', count(*)::integer from public.bids where id = any(${bids})
   union all select 'audit entries', count(*)::integer from public.audit_log where actor_id = any(${users}) or entity_id = any(${entities})
+  union all select 'email log entries', count(*)::integer from public.email_log where recipient like '${emailPattern}' or entity_id = any(${entities})
   union all select 'protecting triggers disabled', count(*)::integer from pg_trigger where tgenabled = 'D' and tgname in (${protectedTriggers.map(([, trigger]) => `'${trigger}'`).join(', ')})
 `);
 console.log(`accounts deleted: ${userIds.length}`);

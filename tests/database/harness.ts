@@ -110,8 +110,8 @@ const supabaseEmulation = `
 
 export async function applyMigration(database: PGlite, fileName: string): Promise<void> {
   const migrationSql = readFileSync(new URL(fileName, migrationsDirectory), 'utf8')
-    // The emulation above stands in for pg_cron, which PGlite cannot load.
-    .replace(/create extension if not exists pg_cron[^;]*;/i, '');
+    // The emulation above stands in for pg_cron; pg_net is only called inside cron job text. PGlite can load neither.
+    .replace(/create extension if not exists (pg_cron|pg_net)[^;]*;/gi, '');
   await database.exec(migrationSql);
 }
 
