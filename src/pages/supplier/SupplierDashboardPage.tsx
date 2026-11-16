@@ -1,6 +1,9 @@
 /** My bids: every bid the supplier has submitted, with its receipt, status and documents (PRD P1-10). */
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../../components/ui/card.tsx';
+import { Label, NativeSelect } from '../../components/ui/fields.tsx';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { DocumentList } from '../../components/DocumentList.tsx';
@@ -58,7 +61,19 @@ export function SupplierDashboardPage() {
 
   return (
     <>
-      <h2>My bids</h2>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-navy-dark sm:text-3xl">My bids</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Every bid you have submitted, with its receipt.</p>
+        </div>
+        <div className="grid w-full gap-2 sm:w-56">
+          <Label htmlFor="bidStatusFilter">Status</Label>
+          <NativeSelect id="bidStatusFilter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'bid_status'> | '')}>
+            <option value="">All</option>
+            {Object.entries(bidStatusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
+          </NativeSelect>
+        </div>
+      </div>
       {subscriptionQuery.isSuccess &&
         (supplierHasAccess(subscription) ? (
           subscription?.status === 'trial' && subscription.trial_ends_at && (
@@ -67,29 +82,44 @@ export function SupplierDashboardPage() {
         ) : (
           <Notice>Your free trial has ended, so you can't submit new bids. Contact CaribbeanTender at {supportEmail} to continue.</Notice>
         ))}
-      <div className="card">
-        <label htmlFor="bidStatusFilter">Status</label>
-        <select id="bidStatusFilter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'bid_status'> | '')}>
-          <option value="">All</option>
-          {Object.entries(bidStatusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
-        </select>
-        {bidsQuery.isPending && <Loading />}
-        {bidsQuery.isError && <ErrorNotice error={bidsQuery.error} />}
-        {bidsQuery.data && shown.length === 0 && (
-          <p>No bids{statusFilter ? ' with this status' : ' yet'}. <Link to="/tenders">Browse open tenders</Link>.</p>
-        )}
+      {bidsQuery.isPending && <Loading />}
+      {bidsQuery.isError && <ErrorNotice error={bidsQuery.error} />}
+      {bidsQuery.data && shown.length === 0 && (
+        <Card className="items-center py-14 text-center">
+          <p className="text-sm text-muted-foreground">No bids{statusFilter ? ' with this status' : ' yet'}.</p>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/tenders">Browse open tenders</Link>
+          </Button>
+        </Card>
+      )}
+      <div className="grid gap-4">
         {shown.map((bid) => (
-          <div className="card" key={bid.id}>
-            <h3><Link to={`/tenders/${bid.tender_id}`}>{bid.tenderTitle}</Link></h3>
-            <p>
-              {formatAmount(bid.amount, bid.currency)} · receipt: submitted {formatJamaicaDateTime(bid.submitted_at, { withSeconds: true })} Jamaica time ·{' '}
-              <span className={`badge ${bid.status}`}>{bidStatusLabels[bid.status]}</span>
-            </p>
-            <DocumentList documents={bid.documents} />
-            {bid.proposalForm && (
-              <AttachedForm formKey={bid.proposalForm.form_key} formVersion={bid.proposalForm.form_version} data={bid.proposalForm.data as FormData} notes={[`Proposal for "${bid.tenderTitle}"`]} />
-            )}
-          </div>
+          <Card key={bid.id}>
+            <CardHeader>
+              <CardTitle className="text-base leading-snug">
+                <Link to={`/tenders/${bid.tender_id}`} className="text-navy-dark">{bid.tenderTitle}</Link>
+              </CardTitle>
+              <CardAction>
+                <span className={`badge ${bid.status}`}>{bidStatusLabels[bid.status]}</span>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground">Amount</dt>
+                  <dd className="mt-0.5 text-lg font-semibold text-navy-dark tabular-nums">{formatAmount(bid.amount, bid.currency)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Receipt</dt>
+                  <dd className="mt-0.5 tabular-nums">Submitted {formatJamaicaDateTime(bid.submitted_at, { withSeconds: true })} Jamaica time</dd>
+                </div>
+              </dl>
+              <DocumentList documents={bid.documents} />
+              {bid.proposalForm && (
+                <AttachedForm formKey={bid.proposalForm.form_key} formVersion={bid.proposalForm.form_version} data={bid.proposalForm.data as FormData} notes={[`Proposal for "${bid.tenderTitle}"`]} />
+              )}
+            </CardContent>
+          </Card>
         ))}
       </div>
     </>

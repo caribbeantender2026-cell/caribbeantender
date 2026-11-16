@@ -1,5 +1,6 @@
 /** A list of recorded tender or bid documents, each downloaded through a logged 60-second link. */
 import { useState } from 'react';
+import { DownloadIcon, FileTextIcon } from 'lucide-react';
 import type { Enums } from '../lib/database.types.ts';
 import { downloadDocument } from '../lib/queries.ts';
 import { errorMessage } from '../lib/supabase.ts';
@@ -35,16 +36,20 @@ export function DocumentList({ documents }: { documents: RecordedDocument[] }) {
 
   return (
     <>
-      <ul className="links">
+      <ul className="mt-2 divide-y rounded-lg border">
         {documents.map((document) => (
-          <li key={document.id}>
-            <button type="button" className="link-button" disabled={downloadingId !== null} onClick={() => void download(document.id)}>
-              {document.file_name}
-            </button>{' '}
-            <span className="small">
-              {roleLabels[document.document_role]}, {Math.max(1, Math.round(document.size_bytes / bytesPerKilobyte))} KB
-              {downloadingId === document.id && ' · preparing…'}
-            </span>
+          <li key={document.id} className="flex items-center gap-3 px-3 py-2.5">
+            <FileTextIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <button type="button" className="link-button max-w-full truncate text-left" disabled={downloadingId !== null} onClick={() => void download(document.id)}>
+                {document.file_name}
+              </button>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {roleLabels[document.document_role]}, {Math.max(1, Math.round(document.size_bytes / bytesPerKilobyte))} KB
+                {downloadingId === document.id && ', preparing…'}
+              </p>
+            </div>
+            <DownloadIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </li>
         ))}
       </ul>

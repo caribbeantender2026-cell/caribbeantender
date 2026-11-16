@@ -128,7 +128,7 @@ function Users() {
                   <td>{user.trial_ends_at ? formatJamaicaDateTime(user.trial_ends_at) : '—'}{user.subscription_status ? ` (${user.subscription_status})` : ''}</td>
                   <td>{user.is_active ? 'Active' : 'Deactivated'}</td>
                   <td>
-                    <button type="button" className="btn outline" onClick={() => void setActive(user.user_id, !user.is_active, user.full_name)}>
+                    <button type="button" className="btn btn-outline" onClick={() => void setActive(user.user_id, !user.is_active, user.full_name)}>
                       {user.is_active ? 'Deactivate' : 'Reactivate'}
                     </button>
                   </td>
@@ -199,7 +199,7 @@ function Tenders() {
                     <td>{tender.bid_count ?? 'Sealed'}</td>
                     <td>
                       {(tender.status === 'open' || tender.status === 'closed') && (
-                        <button type="button" className="btn outline" onClick={() => void cancel(tender.tender_id, tender.title)}>Cancel</button>
+                        <button type="button" className="btn btn-outline" onClick={() => void cancel(tender.tender_id, tender.title)}>Cancel</button>
                       )}
                     </td>
                   </tr>

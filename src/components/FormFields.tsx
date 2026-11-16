@@ -71,7 +71,7 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
           ))}
         </tbody>
       </table>
-      <button type="button" className="btn outline" onClick={() => onChange([...rows, {}])}>Add a row</button>
+      <button type="button" className="btn btn-outline" onClick={() => onChange([...rows, {}])}>Add a row</button>
       {field.lineTotal && field.grandTotal && <p><strong>{field.grandTotal.label}: {displayValue(grandTotal(rows, field.lineTotal))}</strong></p>}
     </div>
   );
@@ -161,7 +161,7 @@ export function PdfButton({ title, schema, data, fileName, notes = [] }: { title
   }
   return (
     <>
-      <button type="button" className="btn outline" onClick={() => void download()}>Download as PDF</button>
+      <button type="button" className="btn btn-outline" onClick={() => void download()}>Download as PDF</button>
       {problem && <Notice tone="error">{problem}</Notice>}
     </>
   );

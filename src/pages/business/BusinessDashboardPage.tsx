@@ -1,12 +1,20 @@
 /** My tenders: every tender the business has posted, filtered by status, newest first (PRD P1-10). */
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { PlusIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { ErrorNotice, Loading } from '../../components/Notices.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent } from '../../components/ui/card.tsx';
+import { Label, NativeSelect } from '../../components/ui/fields.tsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table.tsx';
 import { tenderPhase, tenderPhaseDisplay, type TenderPhase } from '../../lib/rules.ts';
 import { supabase } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime } from '../../lib/time.ts';
+
+// The counts shown above the list: the phases a business acts on.
+const summaryPhases: TenderPhase[] = ['accepting-bids', 'opened', 'awarded', 'draft'];
 
 export function BusinessDashboardPage() {
   const { session } = useAccount();
@@ -29,40 +37,77 @@ export function BusinessDashboardPage() {
 
   return (
     <>
-      <h2>My tenders</h2>
-      <div className="card">
-        <div className="actions">
-          <Link className="btn gold" to="/business/tenders/new">Post a tender</Link>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-navy-dark sm:text-3xl">My tenders</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Every tender you have posted, newest first.</p>
         </div>
-        <label htmlFor="phaseFilter">Status</label>
-        <select id="phaseFilter" value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value as TenderPhase | '')}>
-          <option value="">All</option>
-          {Object.entries(tenderPhaseDisplay).map(([phase, display]) => (
-            <option key={phase} value={phase}>{display.label}</option>
-          ))}
-        </select>
-        {tendersQuery.isPending && <Loading />}
-        {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
-        {tendersQuery.data && (
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr><th>Tender</th><th>Status</th><th>Closes</th></tr>
-              </thead>
-              <tbody>
-                {shown.length === 0 && <tr><td colSpan={3}>No tenders{phaseFilter ? ' with this status' : ' yet'}.</td></tr>}
-                {shown.map((tender) => (
-                  <tr key={tender.id}>
-                    <td><Link to={`/business/tenders/${tender.id}`}>{tender.title}</Link></td>
-                    <td><span className={`badge ${tenderPhaseDisplay[tender.phase].badgeStyle}`}>{tenderPhaseDisplay[tender.phase].label}</span></td>
-                    <td>{formatJamaicaDateTime(tender.closes_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <Button asChild variant="gold">
+          <Link to="/business/tenders/new">
+            <PlusIcon aria-hidden="true" />
+            Post a tender
+          </Link>
+        </Button>
       </div>
+      {tendersQuery.data && (
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {summaryPhases.map((phase) => (
+            <Card key={phase} className="gap-1 py-5">
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{tenderPhaseDisplay[phase].label}</p>
+                <p className="mt-1 text-3xl font-semibold text-navy-dark tabular-nums">{tenders.filter((tender) => tender.phase === phase).length}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="font-semibold text-navy-dark">Tenders</h3>
+          <div className="flex items-center gap-2 sm:w-56">
+            <Label htmlFor="phaseFilter" className="shrink-0">Status</Label>
+            <div className="flex-1">
+              <NativeSelect id="phaseFilter" value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value as TenderPhase | '')}>
+                <option value="">All</option>
+                {Object.entries(tenderPhaseDisplay).map(([phase, display]) => (
+                  <option key={phase} value={phase}>{display.label}</option>
+                ))}
+              </NativeSelect>
+            </div>
+          </div>
+        </div>
+        {tendersQuery.isPending && <div className="px-4"><Loading /></div>}
+        {tendersQuery.isError && <div className="px-4"><ErrorNotice error={tendersQuery.error} /></div>}
+        {tendersQuery.data && (
+          <Table>
+            <TableHeader className="bg-muted/60">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-4">Tender</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="pr-4">Closes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shown.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={3} className="py-10 text-center text-muted-foreground">
+                    No tenders{phaseFilter ? ' with this status' : ' yet'}.
+                  </TableCell>
+                </TableRow>
+              )}
+              {shown.map((tender) => (
+                <TableRow key={tender.id}>
+                  <TableCell className="pl-4 font-medium">
+                    <Link to={`/business/tenders/${tender.id}`} className="text-navy-dark">{tender.title}</Link>
+                  </TableCell>
+                  <TableCell><span className={`badge ${tenderPhaseDisplay[tender.phase].badgeStyle}`}>{tenderPhaseDisplay[tender.phase].label}</span></TableCell>
+                  <TableCell className="pr-4 whitespace-nowrap tabular-nums">{formatJamaicaDateTime(tender.closes_at)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
     </>
   );
 }

@@ -7,6 +7,9 @@ import { AccountProvider } from './auth/AccountContext.tsx';
 import { AccountLayout, PublicLayout, RequireSignIn } from './components/Frame.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
+// Self-hosted fonts (the CSP allows fonts only from this site): a serif for headlines, a sans for text.
+import '@fontsource-variable/newsreader/opsz.css';
+import '@fontsource-variable/instrument-sans';
 import './styles/app.css';
 
 const cacheLifetimeMilliseconds = 30_000;

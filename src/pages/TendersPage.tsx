@@ -1,8 +1,14 @@
 /** Open tenders for signed-in users: soonest-closing first, filtered by one category, a page at a time (PRD P1-04). */
 import { Link, useSearchParams } from 'react-router';
+import { ChevronLeftIcon, ChevronRightIcon, Clock3Icon, SearchXIcon } from 'lucide-react';
 import { ErrorNotice, Loading } from '../components/Notices.tsx';
+import { Badge } from '../components/ui/badge.tsx';
+import { Button } from '../components/ui/button.tsx';
+import { Card } from '../components/ui/card.tsx';
+import { Label, NativeSelect } from '../components/ui/fields.tsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.tsx';
 import { tendersPerPage, useCategories, useCompanyNames, useOpenTenders } from '../lib/queries.ts';
-import { formatJamaicaDateTime } from '../lib/time.ts';
+import { formatJamaicaDateTime, formatTimeLeft } from '../lib/time.ts';
 
 /** Reads a whole number from the address bar, or the fallback for anything else. */
 function wholeNumber(value: string | null, fallback: number): number {
@@ -29,51 +35,94 @@ export function TendersPage() {
     setSearchParameters(next);
   }
 
+  const now = new Date();
+  const businessName = (businessId: string) => namesQuery.data?.get(businessId) ?? 'Business';
+  const categoryName = (id: number | null) => (id !== null ? (categoryNames.get(id) ?? 'Uncategorised') : 'Uncategorised');
   return (
     <>
-      <h2>Open tenders</h2>
-      <div className="card">
-        <label htmlFor="categoryFilter">Category</label>
-        <select id="categoryFilter" value={categoryId ?? ''} onChange={(event) => show(event.target.value ? Number(event.target.value) : null, 0)}>
-          <option value="">All categories</option>
-          {(categoriesQuery.data ?? []).map((category) => (
-            <option key={category.id} value={category.id}>{category.name}</option>
-          ))}
-        </select>
-        <p className="small">Closing times are in Jamaica time.</p>
-        {tendersQuery.isPending && <Loading />}
-        {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
-        {tendersQuery.data && (
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr><th>Tender</th><th>Business</th><th>Category</th><th>Closes</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {tenders.length === 0 && (
-                  <tr><td colSpan={5}>No open tenders{categoryId !== null ? ' in this category' : ''}.</td></tr>
-                )}
-                {tenders.map((tender) => (
-                  <tr key={tender.id}>
-                    <td><Link to={`/tenders/${tender.id}`}>{tender.title}</Link></td>
-                    <td>{namesQuery.data?.get(tender.business_id) ?? '—'}</td>
-                    <td>{tender.category_id !== null ? (categoryNames.get(tender.category_id) ?? '—') : '—'}</td>
-                    <td>{formatJamaicaDateTime(tender.closes_at)}</td>
-                    <td><span className="badge open">Open</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {pageCount > 1 && (
-          <nav className="actions" aria-label="Pages">
-            <button type="button" className="btn outline" disabled={page === 0} onClick={() => show(categoryId, page - 1)}>Previous</button>
-            <span className="small">Page {page + 1} of {pageCount}</span>
-            <button type="button" className="btn outline" disabled={page + 1 >= pageCount} onClick={() => show(categoryId, page + 1)}>Next</button>
-          </nav>
-        )}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-navy-dark sm:text-3xl">Open tenders</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Soonest closing first. Closing times are in Jamaica time.</p>
+        </div>
+        <div className="grid w-full gap-2 sm:w-64">
+          <Label htmlFor="categoryFilter">Category</Label>
+          <NativeSelect id="categoryFilter" value={categoryId ?? ''} onChange={(event) => show(event.target.value ? Number(event.target.value) : null, 0)}>
+            <option value="">All categories</option>
+            {(categoriesQuery.data ?? []).map((category) => (
+              <option key={category.id} value={category.id}>{category.name}</option>
+            ))}
+          </NativeSelect>
+        </div>
       </div>
+      {tendersQuery.isPending && <Loading />}
+      {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
+      {tendersQuery.data && tenders.length === 0 && (
+        <Card className="items-center py-14 text-center">
+          <SearchXIcon className="size-8 text-muted-foreground" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">No open tenders{categoryId !== null ? ' in this category' : ''}.</p>
+        </Card>
+      )}
+      {tenders.length > 0 && (
+        <Card className="gap-0 overflow-hidden py-0">
+          {/* Phones: one block per tender. */}
+          <ul className="divide-y md:hidden">
+            {tenders.map((tender) => (
+              <li key={tender.id} className="relative p-4">
+                <Link to={`/tenders/${tender.id}`} className="font-medium text-navy-dark after:absolute after:inset-0">{tender.title}</Link>
+                <p className="mt-1 text-sm text-muted-foreground">{businessName(tender.business_id)} · {categoryName(tender.category_id)}</p>
+                <p className="mt-2 flex items-center gap-1.5 text-sm tabular-nums">
+                  <Clock3Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                  {formatTimeLeft(tender.closes_at, now) ?? 'Closing'} left
+                </p>
+              </li>
+            ))}
+          </ul>
+          {/* Wider screens: the table. */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader className="bg-muted/60">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-5">Tender</TableHead>
+                  <TableHead>Business</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Closes</TableHead>
+                  <TableHead className="pr-5">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tenders.map((tender) => (
+                  <TableRow key={tender.id}>
+                    <TableCell className="max-w-sm pl-5 font-medium">
+                      <Link to={`/tenders/${tender.id}`} className="text-navy-dark">{tender.title}</Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{businessName(tender.business_id)}</TableCell>
+                    <TableCell><Badge variant="outline" className="font-normal">{categoryName(tender.category_id)}</Badge></TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums">
+                      {formatJamaicaDateTime(tender.closes_at)}
+                      <span className="block text-xs text-muted-foreground">{formatTimeLeft(tender.closes_at, now) ?? 'Closing'} left</span>
+                    </TableCell>
+                    <TableCell className="pr-5"><span className="badge open">Open</span></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
+      {pageCount > 1 && (
+        <nav className="mt-6 flex items-center justify-center gap-3" aria-label="Pages">
+          <Button variant="outline" size="sm" type="button" disabled={page === 0} onClick={() => show(categoryId, page - 1)}>
+            <ChevronLeftIcon aria-hidden="true" />
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground tabular-nums">Page {page + 1} of {pageCount}</span>
+          <Button variant="outline" size="sm" type="button" disabled={page + 1 >= pageCount} onClick={() => show(categoryId, page + 1)}>
+            Next
+            <ChevronRightIcon aria-hidden="true" />
+          </Button>
+        </nav>
+      )}
     </>
   );
 }

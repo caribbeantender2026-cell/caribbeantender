@@ -58,7 +58,7 @@ export function FormsPage() {
               <div className="actions">
                 <Link className="btn" to={`/forms/${form.key}`}>Fill in online</Link>
                 {form.download_path && (
-                  <button type="button" className="btn outline" onClick={() => void downloadPrintable(form.download_path ?? '')}>Download to print</button>
+                  <button type="button" className="btn btn-outline" onClick={() => void downloadPrintable(form.download_path ?? '')}>Download to print</button>
                 )}
               </div>
             </li>
@@ -169,7 +169,7 @@ export function FormFillPage() {
           <div className="actions">
             {!isLocked && <button className="btn" type="submit">{tenderId ? 'Save and attach to the draft' : 'Save'}</button>}
             <PdfButton title={definition.title} schema={definition.parsedSchema} data={current} fileName={`${formKey}.pdf`} />
-            <Link className="btn outline" to={tenderId ? `/business/tenders/${tenderId}/edit` : '/forms'}>Back</Link>
+            <Link className="btn btn-outline" to={tenderId ? `/business/tenders/${tenderId}/edit` : '/forms'}>Back</Link>
           </div>
         </form>
       </div>

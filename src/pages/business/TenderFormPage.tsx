@@ -224,7 +224,7 @@ export function TenderFormPage() {
           {problem && <Notice tone="error">{problem}</Notice>}
           <div className="actions">
             <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : isNew ? 'Save draft and add documents' : 'Save draft'}</button>
-            <Link className="btn outline" to={isNew ? '/business' : `/business/tenders/${tenderId}`}>Cancel</Link>
+            <Link className="btn btn-outline" to={isNew ? '/business' : `/business/tenders/${tenderId}`}>Cancel</Link>
           </div>
         </form>
       </div>

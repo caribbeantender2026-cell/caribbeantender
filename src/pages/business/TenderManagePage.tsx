@@ -168,7 +168,7 @@ export function TenderManagePage() {
             <button type="button" className="btn gold" onClick={() => void act(() => supabase.rpc('publish_tender', { tender_id: tender.id }))}>
               Publish
             </button>
-            <button type="button" className="btn outline" onClick={() => void deleteDraft()}>Delete draft</button>
+            <button type="button" className="btn btn-outline" onClick={() => void deleteDraft()}>Delete draft</button>
           </div>
         )}
 
@@ -203,7 +203,7 @@ export function TenderManagePage() {
           >
             <label htmlFor="cancelReason">Reason for cancelling (shown to suppliers)</label>
             <textarea id="cancelReason" rows={3} maxLength={maximumReasonLength} value={reason} onChange={(event) => setReason(event.target.value)} required />
-            <button className="btn outline" type="submit" disabled={reason.trim() === ''}>Cancel tender</button>
+            <button className="btn btn-outline" type="submit" disabled={reason.trim() === ''}>Cancel tender</button>
           </form>
         )}
       </div>

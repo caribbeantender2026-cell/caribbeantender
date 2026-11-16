@@ -107,7 +107,7 @@ export function Tour({ accountType, onClose }: { accountType: AccountType; onClo
         <p>{step?.text}</p>
         {step?.demo}
         <div className="actions">
-          {stepIndex > 0 && <button type="button" className="btn outline" onClick={() => setStepIndex(stepIndex - 1)}>Back</button>}
+          {stepIndex > 0 && <button type="button" className="btn btn-outline" onClick={() => setStepIndex(stepIndex - 1)}>Back</button>}
           {stepIndex < steps.length - 1 ? (
             <button type="button" className="btn" onClick={() => setStepIndex(stepIndex + 1)}>Next</button>
           ) : (
