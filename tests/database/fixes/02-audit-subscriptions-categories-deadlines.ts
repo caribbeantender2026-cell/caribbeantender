@@ -140,7 +140,11 @@ export const categoriesSuite: FixSuite = {
       name: 'P1-04: the six draft categories are seeded, and signed-in users can read them',
       run: async (database) => {
         const userId = await createUser(database, { accountType: 'supplier' });
-        const rows = assertSucceeded(await runAs<{ name: string }>(database, user(userId), `select name from public.categories order by sort_order`), 'read');
+        // The draft slugs only: the client's list (20261116200000) adds more rows after these.
+        const rows = assertSucceeded(
+          await runAs<{ name: string }>(database, user(userId), `select name from public.categories where slug in ('goods-and-supplies', 'works', 'professional-services', 'technology-services', 'security-services', 'cleaning-and-janitorial') order by sort_order`),
+          'read',
+        );
         assert.deepEqual(rows.map((row) => row.name), [
           'Goods and Supplies', 'Works', 'Professional Services', 'Technology Services', 'Security Services', 'Cleaning and Janitorial',
         ]);
@@ -153,6 +157,38 @@ export const categoriesSuite: FixSuite = {
         const userId = await createUser(database, { accountType: 'business' });
         assertNothingReachable(await runAs(database, anonymous, `select id from public.categories`), 'visitor');
         assertRefused(await runAs(database, user(userId), `insert into public.categories (name, slug) values ('Fake', 'fake')`), 'insert');
+      },
+    },
+  ],
+};
+
+export const clientCategoriesSuite: FixSuite = {
+  migration: '20261116200000_client_categories.sql',
+  title: "The client's 66 categories replace the draft six",
+  cases: [
+    {
+      name: "Client list: 15 Works, 30 Services and 21 Goods & Supplies are offered, each with a code, and the draft six are retired",
+      run: async (database) => {
+        const userId = await createUser(database, { accountType: 'supplier' });
+        const counts = assertSucceeded(
+          await runAs<{ procurement_type: string; total: number }>(database, user(userId), `select procurement_type, count(*)::integer as total from public.categories where is_active group by 1 order by 1`),
+          'read',
+        );
+        assert.deepEqual(counts, [
+          { procurement_type: 'Goods & Supplies', total: 21 },
+          { procurement_type: 'Services', total: 30 },
+          { procurement_type: 'Works', total: 15 },
+        ]);
+        assert.equal(await scalar<string>(database, `select name as value from public.categories where code = 'SRV-011'`), 'Cleaning & Janitorial Services');
+        assert.equal(await scalar<number>(database, `select count(*)::integer as value from public.categories where is_active and slug = 'works'`), 0);
+      },
+    },
+    {
+      name: 'Client list: a category without a valid code, or with a code already used, cannot be offered',
+      run: async (database) => {
+        await assert.rejects(database.query(`insert into public.categories (name, slug) values ('Uncoded', 'uncoded')`), /categories_active_have_code|code/);
+        await assert.rejects(database.query(`insert into public.categories (name, slug, code, procurement_type) values ('Bad code', 'bad-code', 'XYZ-001', 'Works')`), /categories_code_format|code/);
+        await assert.rejects(database.query(`insert into public.categories (name, slug, code, procurement_type) values ('Copy', 'copy', 'WRK-001', 'Works')`), /categories_code_key|duplicate/);
       },
     },
   ],

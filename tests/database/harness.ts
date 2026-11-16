@@ -235,13 +235,13 @@ export async function setSupplierAccess(database: PGlite, supplierId: string, ac
   }
 }
 
-/** The id of the first seeded category, or null before categories exist. */
+/** The id of the first category on offer (the client's list once it exists), or null before categories exist. */
 export async function firstCategoryId(database: PGlite): Promise<number | null> {
   const exists = await database.query<{ present: boolean }>(`select to_regclass('public.categories') is not null as present`);
   if (!exists.rows[0]?.present) {
     return null;
   }
-  const result = await database.query<{ id: number }>(`select id from public.categories order by sort_order limit 1`);
+  const result = await database.query<{ id: number }>(`select id from public.categories order by is_active desc, sort_order limit 1`);
   return result.rows[0]?.id ?? null;
 }
 
