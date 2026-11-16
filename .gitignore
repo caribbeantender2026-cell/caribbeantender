@@ -33,3 +33,5 @@ backups/
 # Playwright output
 test-results/
 playwright-report/
+
+docs
