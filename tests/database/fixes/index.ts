@@ -2,7 +2,7 @@
 import type { FixSuite } from '../suite.ts';
 import { companyNamesSuite, nameViewWritesSuite } from './01-c1-company-names.ts';
 import { auditLogSuite, categoriesSuite, clientCategoriesSuite, closesAtSuite, subscriptionsSuite } from './02-audit-subscriptions-categories-deadlines.ts';
-import { formsSuite, tenderLifecycleSuite } from './03-forms-lifecycle.ts';
+import { clientFormsSuite, formsSuite, tenderLifecycleSuite } from './03-forms-lifecycle.ts';
 import { bidRulesSuite, sealedBidsSuite } from './04-bids-sealed.ts';
 import { signupSuite, storagePoliciesSuite } from './05-storage-signup.ts';
 import { adminSuite, leastPrivilegeGrantsSuite, notificationsSuite } from './06-notifications-admin-grants.ts';
@@ -27,4 +27,5 @@ export const fixSuites: FixSuite[] = [
   adminSuite,
   leastPrivilegeGrantsSuite,
   clientCategoriesSuite,
+  clientFormsSuite,
 ];

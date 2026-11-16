@@ -25,7 +25,7 @@ export const formsSuite: FixSuite = {
       run: async (database) => {
         const userId = await createUser(database, { accountType: 'supplier' });
         const rows = assertSucceeded(
-          await runAs<{ key: string; is_draft: boolean; audience: string }>(database, user(userId), `select key, is_draft, audience from public.form_definitions order by key`),
+          await runAs<{ key: string; is_draft: boolean; audience: string }>(database, user(userId), `select key, is_draft, audience from public.form_definitions where version = 1 and key in ('business-requirements', 'supplier-proposal') order by key`),
           'read definitions',
         );
         assert.deepEqual(rows, [
@@ -116,6 +116,45 @@ export const formsSuite: FixSuite = {
           /cannot be changed/,
         );
         assertRefused(await runAs(database, user(businessId), `delete from public.form_submissions where id = $1`, [submissionId]), 'delete after publishing', /cannot be changed/);
+      },
+    },
+  ],
+};
+
+export const clientFormsSuite: FixSuite = {
+  migration: '20261116210000_client_forms.sql',
+  title: "The client's four standard forms, with tick boxes",
+  cases: [
+    {
+      name: "Client forms: the Tender Creation, Bid Submission, Business and Supplier Registration forms are the newest versions on offer",
+      run: async (database) => {
+        const userId = await createUser(database, { accountType: 'supplier' });
+        const rows = assertSucceeded(
+          await runAs<{ key: string; title: string; is_draft: boolean }>(
+            database,
+            user(userId),
+            `select distinct on (key) key, title, is_draft from public.form_definitions where key in ('business-requirements', 'supplier-proposal', 'business-registration', 'supplier-registration') order by key, version desc`,
+          ),
+          'read definitions',
+        );
+        assert.deepEqual(rows, [
+          { key: 'business-registration', title: 'Business Registration Form', is_draft: false },
+          { key: 'business-requirements', title: 'Tender Creation Form', is_draft: false },
+          { key: 'supplier-proposal', title: 'Bid Submission Form', is_draft: false },
+          { key: 'supplier-registration', title: 'Supplier Registration Form', is_draft: false },
+        ]);
+      },
+    },
+    {
+      name: 'Client forms: pick-one and tick-any answers must be among the listed options',
+      run: async (database) => {
+        const supplierId = await createUser(database, { accountType: 'supplier' });
+        const insert = (data: object) =>
+          runAs(database, user(supplierId), `insert into public.form_submissions (form_key, form_version, owner_id, data) values ('supplier-registration', 1, $1, $2)`, [supplierId, JSON.stringify(data)]);
+        assertSucceeded(await insert({ parish: 'St. Ann', service_areas: ['Kingston', 'Islandwide'], industry: ['Construction'] }), 'listed options');
+        assertRefused(await insert({ parish: 'Nowhere' }), 'unlisted parish');
+        assertRefused(await insert({ service_areas: ['Mars'] }), 'unlisted service area');
+        assertRefused(await insert({ industry: 'Construction' }), 'tick-any given as plain text');
       },
     },
   ],
