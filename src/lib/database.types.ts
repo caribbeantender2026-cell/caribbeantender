@@ -184,23 +184,32 @@ export type Database = {
       }
       categories: {
         Row: {
+          code: string | null
+          examples: string | null
           id: number
           is_active: boolean
           name: string
+          procurement_type: string | null
           slug: string
           sort_order: number
         }
         Insert: {
+          code?: string | null
+          examples?: string | null
           id?: never
           is_active?: boolean
           name: string
+          procurement_type?: string | null
           slug: string
           sort_order?: number
         }
         Update: {
+          code?: string | null
+          examples?: string | null
           id?: never
           is_active?: boolean
           name?: string
+          procurement_type?: string | null
           slug?: string
           sort_order?: number
         }
@@ -852,10 +861,20 @@ export type Database = {
         Args: { reason: string; tender_id: string }
         Returns: undefined
       }
+      due_emails: {
+        Args: { batch_size?: number }
+        Returns: {
+          details: Json
+          entity_id: string
+          recipient: string
+          type: string
+        }[]
+      }
       extend_tender_closing_time: {
         Args: { new_closes_at: string; tender_id: string }
         Returns: undefined
       }
+      notifications_cron_secret: { Args: never; Returns: string }
       publish_tender: { Args: { tender_id: string }; Returns: string }
       read_tender_bids: {
         Args: { tender_id: string }

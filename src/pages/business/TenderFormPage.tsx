@@ -9,6 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
+import { CategoryOptions } from '../../components/CategoryOptions.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, checkDocument, tenderDocumentPath } from '../../lib/documents.ts';
 import { useCategories } from '../../lib/queries.ts';
@@ -207,9 +208,7 @@ export function TenderFormPage() {
           <label htmlFor="tenderCategory">Category</label>
           <select id="tenderCategory" {...form.register('categoryId')}>
             <option value="">Choose a category</option>
-            {(categoriesQuery.data ?? []).map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
+            <CategoryOptions categories={categoriesQuery.data ?? []} />
           </select>
           {errors.categoryId && <div className="match-error">{errors.categoryId.message}</div>}
 
