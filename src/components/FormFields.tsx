@@ -1,7 +1,7 @@
 /** Fills in, shows and downloads a form defined as data (PRD P1-11); no form needs its own interface code. */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { displayValue, grandTotal, lineTotal, readSchema, type FormData, type FormField, type FormRow, type FormSchema } from '../lib/forms.ts';
+import { displayValue, grandTotal, lineTotal, readSchema, showsLineTotal, tableRows, type FormData, type FormField, type FormRow, type FormSchema } from '../lib/forms.ts';
 import { errorMessage, supabase } from '../lib/supabase.ts';
 import { Notice } from './Notices.tsx';
 
@@ -46,7 +46,7 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
         <thead>
           <tr>
             {columns.map((column) => <th key={column.name} scope="col">{column.label}</th>)}
-            {field.lineTotal && <th scope="col">{field.lineTotal.label}</th>}
+            {field.lineTotal && showsLineTotal(field.lineTotal) && <th scope="col">{field.lineTotal.label}</th>}
             <th scope="col"><span className="visually-hidden">Remove</span></th>
           </tr>
         </thead>
@@ -65,7 +65,7 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
                   />
                 </td>
               ))}
-              {field.lineTotal && <td>{displayValue(lineTotal(row, field.lineTotal))}</td>}
+              {field.lineTotal && showsLineTotal(field.lineTotal) && <td>{displayValue(lineTotal(row, field.lineTotal))}</td>}
               <td><button type="button" className="link-button" onClick={() => onChange(rows.filter((_, index) => index !== rowIndex))}>Remove</button></td>
             </tr>
           ))}
@@ -82,15 +82,43 @@ export function FormFields({ schema, data, onChange, idPrefix = 'form' }: { sche
   return (
     <>
       {schema.description && <Notice>{schema.description}</Notice>}
-      {schema.fields.map((field) => {
+      {schema.fields.map((field, index) => {
         const id = `${idPrefix}-${field.name}`;
         const value = data[field.name];
         const set = (next: FormData[string]) => onChange({ ...data, [field.name]: next });
+        const label = `${field.label}${field.required ? '' : ' (optional)'}`;
+        const startsSection = field.section && field.section !== schema.fields[index - 1]?.section;
+        const heading = startsSection ? <h3 className="form-section">{field.section}</h3> : null;
+        if (field.type === 'choice' || field.type === 'checkboxes') {
+          const isChoice = field.type === 'choice';
+          const chosen = isChoice ? (typeof value === 'string' ? [value] : []) : Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+          return (
+            <div key={field.name}>
+              {heading}
+              <fieldset>
+                <legend>{label}</legend>
+                {(field.options ?? []).map((option, optionIndex) => (
+                  <label key={option} className="checkbox" htmlFor={`${id}-${optionIndex}`}>
+                    <input
+                      id={`${id}-${optionIndex}`}
+                      type={isChoice ? 'radio' : 'checkbox'}
+                      name={id}
+                      checked={chosen.includes(option)}
+                      onChange={(event) => set(isChoice ? option : event.target.checked ? [...chosen, option] : chosen.filter((item) => item !== option))}
+                    />
+                    {option}
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+          );
+        }
         return (
           <div key={field.name}>
-            <label htmlFor={id}>{field.label}{field.required ? '' : ' (optional)'}</label>
+            {heading}
+            <label htmlFor={id}>{label}</label>
             {field.type === 'table' ? (
-              <TableField field={field} rows={Array.isArray(value) ? value : []} onChange={set} idPrefix={id} />
+              <TableField field={field} rows={tableRows(value)} onChange={set} idPrefix={id} />
             ) : field.type === 'textarea' ? (
               <textarea id={id} rows={5} maxLength={field.maxLength} value={typeof value === 'string' ? value : ''} onChange={(event) => set(event.target.value)} />
             ) : field.type === 'number' ? (
@@ -116,7 +144,7 @@ export function FormAnswers({ schema, data }: { schema: FormSchema; data: FormDa
         if (field.type !== 'table') {
           return [<dt key={`${field.name}-label`}>{field.label}</dt>, <dd key={field.name} className="preserve-lines">{displayValue(value) || '—'}</dd>];
         }
-        const rows: FormRow[] = Array.isArray(value) ? value : [];
+        const rows = tableRows(value);
         return [
           <dt key={`${field.name}-label`}>{field.label}</dt>,
           <dd key={field.name}>
@@ -125,14 +153,14 @@ export function FormAnswers({ schema, data }: { schema: FormSchema; data: FormDa
                 <thead>
                   <tr>
                     {(field.columns ?? []).map((column) => <th key={column.name} scope="col">{column.label}</th>)}
-                    {field.lineTotal && <th scope="col">{field.lineTotal.label}</th>}
+                    {field.lineTotal && showsLineTotal(field.lineTotal) && <th scope="col">{field.lineTotal.label}</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row, index) => (
                     <tr key={index}>
                       {(field.columns ?? []).map((column) => <td key={column.name}>{displayValue(row[column.name])}</td>)}
-                      {field.lineTotal && <td>{displayValue(lineTotal(row, field.lineTotal))}</td>}
+                      {field.lineTotal && showsLineTotal(field.lineTotal) && <td>{displayValue(lineTotal(row, field.lineTotal))}</td>}
                     </tr>
                   ))}
                 </tbody>

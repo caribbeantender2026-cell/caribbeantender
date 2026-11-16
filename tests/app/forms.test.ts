@@ -1,7 +1,7 @@
 // The forms engine's rules mirror private.form_data_problems, so the screen refuses what the database would.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { formProblems, grandTotal, lineTotal, readSchema, type FormSchema } from '../../src/lib/forms.ts';
+import { displayValue, formProblems, grandTotal, lineTotal, readSchema, showsLineTotal, type FormSchema } from '../../src/lib/forms.ts';
 
 const proposal: FormSchema = {
   fields: [
@@ -87,4 +87,35 @@ test('A stored schema that is not a list of named fields becomes an empty form',
     assert.deepEqual(readSchema(stored).fields, []);
   }
   assert.equal(readSchema({ fields: [{ name: 'a', label: 'A', type: 'text' }, { label: 'no name' }, null] }).fields.length, 1);
+});
+
+const tickBoxes: FormSchema = {
+  fields: [
+    { name: 'parish', label: 'Parish', type: 'choice', options: ['Kingston', 'St. Ann'], required: true, section: 'Address' },
+    { name: 'service_areas', label: 'Service areas', type: 'checkboxes', options: ['Kingston', 'Islandwide'], required: true },
+  ],
+};
+
+test('Pick-one and tick-any fields accept only their listed options', () => {
+  assert.deepEqual(formProblems(tickBoxes, { parish: 'St. Ann', service_areas: ['Kingston', 'Islandwide'] }, true), []);
+  assert.deepEqual(formProblems(tickBoxes, { parish: 'Nowhere', service_areas: ['Mars'] }, false), [
+    'Parish must be one of the listed options.',
+    'Service areas must only contain the listed options.',
+  ]);
+  assert.deepEqual(formProblems(tickBoxes, { parish: ['Kingston'], service_areas: 'Kingston' }, false), [
+    'Parish must be one of the listed options.',
+    'Service areas must be a list of the listed options.',
+  ]);
+  assert.deepEqual(formProblems(tickBoxes, { service_areas: [] }, true), ['Parish is required.', 'Service areas is required.']);
+});
+
+test('Ticked options read as a list on screen and in the PDF', () => {
+  assert.equal(displayValue(['Kingston', 'Islandwide']), 'Kingston, Islandwide');
+});
+
+test('A per-row total that only repeats one column is not shown as its own column', () => {
+  assert.equal(showsLineTotal({ label: 'Weight (%)', add: ['weight'] }), false);
+  assert.equal(showsLineTotal({ label: 'Total', multiply: ['quantity', 'unit_price'] }), true);
+  assert.equal(showsLineTotal({ label: 'Total', add: ['labour', 'materials'] }), true);
+  assert.equal(showsLineTotal(undefined), false);
 });
