@@ -12,7 +12,7 @@ import type { FormData } from '../../lib/forms.ts';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import type { Enums } from '../../lib/database.types.ts';
 import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
-import { supplierHasAccess } from '../../lib/rules.ts';
+import { subscriptionPrices, supplierHasAccess } from '../../lib/rules.ts';
 import { supabase, supportEmail } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime } from '../../lib/time.ts';
 
@@ -77,10 +77,10 @@ export function SupplierDashboardPage() {
       {subscriptionQuery.isSuccess &&
         (supplierHasAccess(subscription) ? (
           subscription?.status === 'trial' && subscription.trial_ends_at && (
-            <Notice>Your free trial ends {formatJamaicaDateTime(subscription.trial_ends_at)} Jamaica time.</Notice>
+            <Notice>Your free trial ends {formatJamaicaDateTime(subscription.trial_ends_at)} Jamaica time. After that, a subscription is {subscriptionPrices}.</Notice>
           )
         ) : (
-          <Notice>Your free trial has ended, so you can't submit new bids. Contact CaribbeanTender at {supportEmail} to continue.</Notice>
+          <Notice>Your free trial has ended, so you can't submit new bids. A subscription is {subscriptionPrices}. Contact CaribbeanTender at {supportEmail} to subscribe.</Notice>
         ))}
       {bidsQuery.isPending && <Loading />}
       {bidsQuery.isError && <ErrorNotice error={bidsQuery.error} />}

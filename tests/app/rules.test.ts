@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { safeNextPath, supplierHasAccess, tenderPhase } from '../../src/lib/rules.ts';
+import { annualPriceUsd, safeNextPath, subscriptionPrices, supplierHasAccess, tenderPhase } from '../../src/lib/rules.ts';
 
 const now = new Date('2026-10-10T12:00:00Z');
 const later = '2026-10-11T12:00:00Z';
@@ -37,4 +37,9 @@ test('Only same-site paths are accepted after login', () => {
   for (const requestedPath of rejected) {
     assert.equal(safeNextPath(requestedPath), null, `should reject ${String(requestedPath)}`);
   }
+});
+
+test("Supplier prices follow the client's pricing: US$79 a month, and 12 months less 15% a year", () => {
+  assert.equal(annualPriceUsd, 805.8);
+  assert.equal(subscriptionPrices, 'US$79 a month, or US$805.80 a year (save 15%)');
 });
