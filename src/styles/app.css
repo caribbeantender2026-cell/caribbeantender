@@ -64,6 +64,16 @@
   --shadow-surface: 0 0 0 1px rgb(15 23 42 / 0.07), 0 1px 2px rgb(15 23 42 / 0.05), 0 4px 12px -4px rgb(15 23 42 / 0.08);
 }
 
+/* The home page's example tender: a soft gold ring pulses out from "Submit a bid". Used with motion-safe: only. */
+@theme {
+  --animate-bid-glow: bid-glow 2.4s ease-out infinite;
+
+  @keyframes bid-glow {
+    0% { box-shadow: 0 0 0 0 rgb(217 158 4 / 0.55); }
+    70%, 100% { box-shadow: 0 0 0 10px rgb(217 158 4 / 0); }
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

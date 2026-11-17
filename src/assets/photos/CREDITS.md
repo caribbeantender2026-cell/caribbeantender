@@ -12,5 +12,3 @@ All photos are from [Unsplash](https://unsplash.com) under the [Unsplash License
 | `cleaning-office.webp` | https://images.unsplash.com/photo-1781637590564-01c65dbf2039 |
 | `technology-laptop.webp` | https://images.unsplash.com/photo-1587620962725-abab7fe55159 |
 | `signing-contract.webp` | https://images.unsplash.com/photo-1521791055366-0d553872125f |
-
-The screenshots in `../product/` are of this app with sample data; the companies in them are made up.
