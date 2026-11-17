@@ -6,6 +6,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { Notice } from '../../components/Notices.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
+import { Choice, Field, Input, NativeSelect } from '../../components/ui/fields.tsx';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
 const minimumPasswordLength = 8;
@@ -35,8 +38,8 @@ type RegisterValues = z.infer<typeof registerSchema>;
 function MatchHint({ first, second, what }: { first: string; second: string; what: string }) {
   if (!first || !second) return null;
   return first === second
-    ? <div className="match-success">✓ {what} match</div>
-    : <div className="match-error">✗ {what} do not match</div>;
+    ? <div className="text-sm font-medium text-success">✓ {what} match</div>
+    : <div className="text-sm font-medium text-destructive">✗ {what} do not match</div>;
 }
 
 export function RegisterPage() {
@@ -78,51 +81,58 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="card form">
-      <h2>Register Account</h2>
-      <p>
-        Each email address creates one CaribbeanTender login. That login may have one Business account and one Supplier
-        account. Select the first account type you want to create.
-      </p>
-      <form onSubmit={form.handleSubmit(register)} noValidate>
-        <label htmlFor="registerName">Full Name</label>
-        <input id="registerName" autoComplete="name" {...form.register('fullName')} />
-        {errors.fullName && <div className="match-error">{errors.fullName.message}</div>}
+    <Card className="w-[calc(100%-2rem)] max-w-md py-8">
+      <CardHeader className="px-8">
+        <h2 className="text-2xl font-semibold tracking-tight text-navy-dark">Register Account</h2>
+        <p>
+          Each email address creates one CaribbeanTender login. That login may have one Business account and one Supplier
+          account. Select the first account type you want to create.
+        </p>
+      </CardHeader>
+      <CardContent className="px-8">
+        <form className="grid gap-4" onSubmit={form.handleSubmit(register)} noValidate>
+          <Field label="Full Name" htmlFor="registerName" error={errors.fullName?.message}>
+            <Input id="registerName" autoComplete="name" {...form.register('fullName')} />
+          </Field>
 
-        <label htmlFor="registerEmail">Email Address</label>
-        <input id="registerEmail" type="email" autoComplete="email" {...form.register('email')} />
-        {errors.email && <div className="match-error">{errors.email.message}</div>}
-        <label htmlFor="confirmEmail">Confirm Email Address</label>
-        <input id="confirmEmail" type="email" autoComplete="email" {...form.register('confirmEmail')} />
-        <MatchHint first={(watched.email ?? '').trim().toLowerCase()} second={(watched.confirmEmail ?? '').trim().toLowerCase()} what="Email addresses" />
+          <Field label="Email Address" htmlFor="registerEmail" error={errors.email?.message}>
+            <Input id="registerEmail" type="email" autoComplete="email" {...form.register('email')} />
+          </Field>
+          <Field label="Confirm Email Address" htmlFor="confirmEmail">
+            <Input id="confirmEmail" type="email" autoComplete="email" {...form.register('confirmEmail')} />
+            <MatchHint first={(watched.email ?? '').trim().toLowerCase()} second={(watched.confirmEmail ?? '').trim().toLowerCase()} what="Email addresses" />
+          </Field>
 
-        <label htmlFor="registerPassword">Password</label>
-        <input id="registerPassword" type="password" autoComplete="new-password" {...form.register('password')} />
-        {errors.password && <div className="match-error">{errors.password.message}</div>}
-        <label htmlFor="confirmPassword">Confirm Password</label>
-        <input id="confirmPassword" type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
-        <MatchHint first={watched.password ?? ''} second={watched.confirmPassword ?? ''} what="Passwords" />
+          <Field label="Password" htmlFor="registerPassword" error={errors.password?.message}>
+            <Input id="registerPassword" type="password" autoComplete="new-password" {...form.register('password')} />
+          </Field>
+          <Field label="Confirm Password" htmlFor="confirmPassword">
+            <Input id="confirmPassword" type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
+            <MatchHint first={watched.password ?? ''} second={watched.confirmPassword ?? ''} what="Passwords" />
+          </Field>
 
-        <label htmlFor="registerType">Account Type</label>
-        <select id="registerType" defaultValue="" {...form.register('accountType')}>
-          <option value="" disabled>Select account type</option>
-          <option value="business">Business</option>
-          <option value="supplier">Supplier</option>
-        </select>
-        {errors.accountType && <div className="match-error">{errors.accountType.message}</div>}
+          <Field label="Account Type" htmlFor="registerType" error={errors.accountType?.message}>
+            <NativeSelect id="registerType" defaultValue="" {...form.register('accountType')}>
+              <option value="" disabled>Select account type</option>
+              <option value="business">Business</option>
+              <option value="supplier">Supplier</option>
+            </NativeSelect>
+          </Field>
 
-        <label className="checkbox" htmlFor="acceptedTerms">
-          <input id="acceptedTerms" type="checkbox" {...form.register('acceptedTerms')} />
-          I agree to the <Link to="/terms" target="_blank">Terms of Service</Link> and <Link to="/privacy" target="_blank">Privacy Policy</Link>
-        </label>
-        {errors.acceptedTerms && <div className="match-error">{errors.acceptedTerms.message}</div>}
+          <div className="grid gap-2">
+            <Choice id="acceptedTerms" type="checkbox" {...form.register('acceptedTerms')}>
+              I agree to the <Link to="/terms" target="_blank">Terms of Service</Link> and <Link to="/privacy" target="_blank">Privacy Policy</Link>
+            </Choice>
+            {errors.acceptedTerms && <p className="text-sm font-medium text-destructive">{errors.acceptedTerms.message}</p>}
+          </div>
 
-        {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
-        <div className="actions">
-          <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create Account'}</button>
-          <Link className="btn gold" to="/login">Already Registered?</Link>
-        </div>
-      </form>
-    </div>
+          {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create Account'}</Button>
+            <Button asChild variant="gold"><Link to="/login">Already Registered?</Link></Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

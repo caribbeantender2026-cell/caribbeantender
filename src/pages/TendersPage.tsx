@@ -114,7 +114,7 @@ export function TendersPage() {
                       {formatJamaicaDateTime(tender.closes_at)}
                       <span className="block text-xs text-muted-foreground">{formatTimeLeft(tender.closes_at, now) ?? 'Closing'} left</span>
                     </TableCell>
-                    <TableCell className="pr-5"><span className="badge open">Open</span></TableCell>
+                    <TableCell className="pr-5"><Badge variant="open">Open</Badge></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

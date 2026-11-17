@@ -12,7 +12,7 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
         gold: 'bg-gold text-gold-foreground shadow-xs hover:bg-gold/85',
         destructive: 'bg-destructive text-white shadow-xs hover:bg-destructive/90',
-        outline: 'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground',
+        outline: 'border bg-background text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
       },
       size: {

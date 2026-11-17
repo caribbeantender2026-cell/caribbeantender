@@ -138,39 +138,11 @@
 }
 
 /*
- * The pages not rebuilt with shadcn components keep their original class names. These rules give
- * those classes the same shadcn look, so every page matches.
+ * Styles for markup that utilities can't reach: photograph backdrops, the hero's fade, and text
+ * rendered from Markdown. Everything else is Tailwind utilities on the shadcn components in
+ * src/components/ui.
  */
 @layer components {
-  .card {
-    @apply mb-6 rounded-xl border border-transparent bg-card p-6 text-card-foreground shadow-surface;
-  }
-
-  .card h2 {
-    @apply mb-2 text-xl font-semibold tracking-tight text-navy-dark;
-  }
-
-  .card h3 {
-    @apply mt-6 mb-3 text-base font-semibold text-navy-dark first:mt-0;
-  }
-
-  .card h4 {
-    @apply mb-2 font-semibold;
-  }
-
-  .card p + p {
-    @apply mt-3;
-  }
-
-  .card.form {
-    @apply max-w-3xl;
-  }
-
-  /* Sign-in, sign-up and password pages: the form is the whole page, so it sits centred. */
-  main > .card.form:first-child {
-    @apply mx-auto max-w-md p-8;
-  }
-
   /* The photograph of Jamaica's hills under a navy wash: behind the header and hero on the homepage, and the whole sign-in page. */
   .hills-backdrop {
     background-color: var(--midnight);
@@ -232,174 +204,6 @@
     @apply rounded-lg bg-midnight px-4 py-5 text-center font-serif text-lg leading-tight text-white;
   }
 
-  /* Public pages in the visitor's frame: a card sits centred in a reading column. */
-  .marketing-main > .card {
-    @apply mx-auto mt-10 mb-20 w-[calc(100%-2rem)] max-w-3xl;
-  }
-
-  /* Sign-in, sign-up and password pages: the frame centres the form card over the photograph. */
-  .marketing-main > .card.form:first-child {
-    @apply my-0 max-w-md;
-  }
-
-  main > .card.form:first-child > h2 {
-    @apply text-2xl;
-  }
-
-  .card .card {
-    @apply mt-4 mb-0 border-border shadow-none;
-  }
-
-  .btn {
-    @apply inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-button bg-primary px-4 text-sm font-medium whitespace-nowrap text-primary-foreground no-underline shadow-xs transition-[color,background-color,border-color,box-shadow,scale] duration-150 ease-out outline-none hover:bg-primary/90 hover:no-underline active:scale-[0.96] focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-wait disabled:opacity-50;
-  }
-
-  .btn.gold {
-    @apply bg-gold text-gold-foreground hover:bg-gold/85;
-  }
-
-  .btn.btn-outline {
-    @apply border bg-background text-foreground hover:bg-accent hover:text-accent-foreground;
-  }
-
-  .actions {
-    @apply mt-5 flex flex-wrap items-center gap-2;
-  }
-
-  .small {
-    @apply text-sm text-muted-foreground;
-  }
-
-  .links > li {
-    @apply border-b py-3 last:border-b-0;
-  }
-
-  .form label {
-    @apply mt-4 mb-1.5 block text-sm font-medium;
-  }
-
-  .form label.checkbox {
-    @apply mt-3 flex items-start gap-2 font-normal;
-  }
-
-  .form input:not([type="checkbox"]):not([type="radio"]),
-  .form select,
-  .form textarea {
-    @apply w-full min-w-0 rounded-md border border-input bg-card px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm;
-  }
-
-  .form input:not([type="checkbox"]):not([type="radio"]),
-  .form select {
-    @apply h-9 py-1;
-  }
-
-  .form input[type="file"] {
-    @apply h-auto py-1.5 file:mr-3 file:rounded-md file:border file:bg-muted file:px-3 file:py-1 file:text-sm file:font-medium;
-  }
-
-  .form textarea {
-    @apply min-h-28;
-  }
-
-  .form fieldset {
-    @apply mt-4 rounded-md border px-4 pt-1 pb-3;
-  }
-
-  /* Section headings in the client's long forms, such as "Company information". */
-  .form .form-section {
-    @apply mt-10 mb-0 border-b pb-2 text-base font-semibold text-navy-dark;
-  }
-
-  .form legend {
-    @apply px-1 text-sm font-medium;
-  }
-
-  .checkbox input {
-    @apply mt-0.5 size-4 accent-primary;
-  }
-
-  .table {
-    @apply w-full text-sm;
-  }
-
-  .table th {
-    @apply h-10 border-b px-3 text-left align-middle font-medium whitespace-nowrap text-muted-foreground;
-  }
-
-  .table td {
-    @apply border-b p-3 align-top;
-  }
-
-  .table tbody tr {
-    @apply transition-colors hover:bg-muted/50;
-  }
-
-  .table-scroll {
-    @apply mt-3 overflow-x-auto;
-  }
-
-  .badge {
-    @apply inline-flex items-center rounded-md border border-transparent bg-accent px-2 py-0.5 text-xs font-medium whitespace-nowrap text-accent-foreground;
-  }
-
-  .badge.draft,
-  .badge.unsuccessful,
-  .badge.tender_cancelled { @apply bg-muted text-muted-foreground; }
-  .badge.open { @apply bg-success/10 text-success; }
-  .badge.waiting { @apply bg-gold/15 text-gold-foreground; }
-  .badge.closed,
-  .badge.submitted { @apply bg-accent text-accent-foreground; }
-  .badge.awarded { @apply bg-gold text-gold-foreground; }
-  .badge.cancelled { @apply bg-destructive/10 text-destructive; }
-
-  .details {
-    @apply my-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm;
-  }
-
-  .details dt {
-    @apply text-muted-foreground;
-  }
-
-  .link-button {
-    @apply cursor-pointer font-medium text-primary underline underline-offset-4 disabled:cursor-wait disabled:text-muted-foreground;
-  }
-
-  .preserve-lines {
-    @apply whitespace-pre-line;
-  }
-
-  .match-success {
-    @apply mt-1.5 text-sm font-medium text-success;
-  }
-
-  .match-error {
-    @apply mt-1.5 text-sm font-medium text-destructive;
-  }
-
-  .password-help {
-    @apply mt-2 text-right text-sm;
-  }
-
-  .password-rules {
-    @apply mt-2 rounded-md border bg-muted px-3 py-2;
-  }
-
-  .recovery-note {
-    @apply mt-4;
-  }
-
-  .amount-field {
-    @apply flex items-stretch;
-  }
-
-  .currency-prefix {
-    @apply flex items-center rounded-l-md border border-r-0 bg-muted px-3 text-sm font-semibold text-navy-dark;
-  }
-
-  .form .amount-field input:not([type="checkbox"]):not([type="radio"]) {
-    @apply rounded-l-none;
-  }
-
   .markdown {
     @apply leading-relaxed;
   }
@@ -409,7 +213,12 @@
   }
 
   .markdown h2 {
-    @apply mt-8 mb-3 text-xl font-semibold text-navy-dark;
+    @apply mt-8 mb-3 text-xl font-semibold tracking-tight text-navy-dark;
+  }
+
+  .markdown h3,
+  .markdown h4 {
+    @apply mt-6 mb-2 text-base font-semibold text-navy-dark;
   }
 
   .markdown p,
@@ -424,21 +233,5 @@
 
   .markdown ol {
     @apply list-decimal pl-6;
-  }
-
-  .visually-hidden {
-    @apply sr-only;
-  }
-
-  .tour-backdrop {
-    @apply fixed inset-0 z-50 flex items-center justify-center bg-navy-dark/60 p-4 backdrop-blur-sm;
-  }
-
-  .tour {
-    @apply max-h-[90vh] w-full max-w-xl overflow-y-auto;
-  }
-
-  .tour h2 {
-    @apply text-xl font-semibold text-navy-dark;
   }
 }

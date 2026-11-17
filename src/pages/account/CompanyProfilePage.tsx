@@ -9,6 +9,9 @@ import { AccountPicture, accountPicturesBucket } from '../../components/AccountP
 import { CategoryOptions } from '../../components/CategoryOptions.tsx';
 import { Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
+import { Choice, Field, Input, NativeSelect, Textarea } from '../../components/ui/fields.tsx';
 import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
@@ -89,45 +92,39 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
       back={{ to: dashboardPath, label: accountType === 'business' ? 'My tenders' : 'My bids' }}
     />
     {session && profile && <AccountPictureSetting accountType={accountType} userId={session.user.id} picturePath={profile.picture_path} />}
-    <div className="card form">
-      <form onSubmit={form.handleSubmit(saveProfile)} noValidate>
-        <label htmlFor="companyName">Company Name</label>
-        <input id="companyName" {...form.register('companyName')} />
-        {errors.companyName && <div className="match-error">{errors.companyName.message}</div>}
-
-        <label htmlFor="companyAddress">{accountType === 'business' ? 'Business Address' : 'Company Address'}</label>
-        <input id="companyAddress" autoComplete="street-address" {...form.register('companyAddress')} />
-        {errors.companyAddress && <div className="match-error">{errors.companyAddress.message}</div>}
-
-        {accountType === 'supplier' && (
-          <>
-            <label htmlFor="categoryId">Category (new tender alerts follow it)</label>
-            <select id="categoryId" {...form.register('categoryId')}>
-              <option value="">Select category</option>
-              <CategoryOptions categories={categoriesQuery.data ?? []} />
-            </select>
-            {errors.categoryId && <div className="match-error">{errors.categoryId.message}</div>}
-          </>
-        )}
-
-        <label htmlFor="phone">Contact Number</label>
-        <input id="phone" type="tel" autoComplete="tel" {...form.register('phone')} />
-        {errors.phone && <div className="match-error">{errors.phone.message}</div>}
-
-        <label htmlFor="contactEmail">Email Address</label>
-        <input id="contactEmail" type="email" autoComplete="email" {...form.register('contactEmail')} />
-        {errors.contactEmail && <div className="match-error">{errors.contactEmail.message}</div>}
-
-        <label htmlFor="description">Company Description</label>
-        <textarea id="description" {...form.register('description')} />
-        {errors.description && <div className="match-error">{errors.description.message}</div>}
-
-        {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
-        <div className="actions">
-          <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : 'Save profile'}</button>
-        </div>
-      </form>
-    </div>
+    <Card className="mb-6 max-w-3xl">
+      <CardContent>
+        <form className="grid gap-4" onSubmit={form.handleSubmit(saveProfile)} noValidate>
+          <Field label="Company Name" htmlFor="companyName" error={errors.companyName?.message}>
+            <Input id="companyName" {...form.register('companyName')} />
+          </Field>
+          <Field label={accountType === 'business' ? 'Business Address' : 'Company Address'} htmlFor="companyAddress" error={errors.companyAddress?.message}>
+            <Input id="companyAddress" autoComplete="street-address" {...form.register('companyAddress')} />
+          </Field>
+          {accountType === 'supplier' && (
+            <Field label="Category (new tender alerts follow it)" htmlFor="categoryId" error={errors.categoryId?.message}>
+              <NativeSelect id="categoryId" {...form.register('categoryId')}>
+                <option value="">Select category</option>
+                <CategoryOptions categories={categoriesQuery.data ?? []} />
+              </NativeSelect>
+            </Field>
+          )}
+          <Field label="Contact Number" htmlFor="phone" error={errors.phone?.message}>
+            <Input id="phone" type="tel" autoComplete="tel" {...form.register('phone')} />
+          </Field>
+          <Field label="Email Address" htmlFor="contactEmail" error={errors.contactEmail?.message}>
+            <Input id="contactEmail" type="email" autoComplete="email" {...form.register('contactEmail')} />
+          </Field>
+          <Field label="Company Description" htmlFor="description" error={errors.description?.message}>
+            <Textarea id="description" {...form.register('description')} />
+          </Field>
+          {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : 'Save profile'}</Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
     {accountType === 'supplier' && session && <TenderAlertsSetting userId={session.user.id} />}
     </>
   );
@@ -206,36 +203,40 @@ function AccountPictureSetting({ accountType, userId, picturePath }: { accountTy
   }
 
   return (
-    <div className="card form">
-      <h3>Picture</h3>
-      <p className="text-sm text-ink/70">
-        Shown next to your company name on your {accountType === 'business' ? 'tenders' : 'bids'}, and in your menu. Any picture you like; it is cropped to a square.
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-4">
-        <AccountPicture picturePath={picturePath} className="size-16 rounded-xl" />
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            // Cleared so choosing the same file again still counts as a change.
-            event.target.value = '';
-            if (file) void save(() => upload(file));
-          }}
-        />
-        <button type="button" className="btn btn-outline" disabled={isSaving} onClick={() => fileInput.current?.click()}>
-          {isSaving ? 'Saving…' : picturePath ? 'Change picture' : 'Upload a picture'}
-        </button>
-        {picturePath && (
-          <button type="button" className="btn btn-outline" disabled={isSaving} onClick={() => void save(() => remove(picturePath))}>
-            Remove picture
-          </button>
-        )}
-      </div>
-      {problem && <Notice tone="error">{problem}</Notice>}
-    </div>
+    <Card className="mb-6 max-w-3xl">
+      <CardHeader>
+        <h3 className="text-base font-semibold text-navy-dark">Picture</h3>
+        <p className="text-sm text-ink/70">
+          Shown next to your company name on your {accountType === 'business' ? 'tenders' : 'bids'}, and in your menu. Any picture you like; it is cropped to a square.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center gap-4">
+          <AccountPicture picturePath={picturePath} className="size-16 rounded-xl" />
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              // Cleared so choosing the same file again still counts as a change.
+              event.target.value = '';
+              if (file) void save(() => upload(file));
+            }}
+          />
+          <Button type="button" variant="outline" disabled={isSaving} onClick={() => fileInput.current?.click()}>
+            {isSaving ? 'Saving…' : picturePath ? 'Change picture' : 'Upload a picture'}
+          </Button>
+          {picturePath && (
+            <Button type="button" variant="outline" disabled={isSaving} onClick={() => void save(() => remove(picturePath))}>
+              Remove picture
+            </Button>
+          )}
+        </div>
+        {problem && <Notice tone="error">{problem}</Notice>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -264,14 +265,17 @@ function TenderAlertsSetting({ userId }: { userId: string }) {
   if (preferenceQuery.isPending) return null;
   const tenderAlerts = preferenceQuery.data?.tender_alerts ?? true;
   return (
-    <div className="card form">
-      <h3>Email settings</h3>
-      <label className="checkbox" htmlFor="tenderAlerts">
-        <input id="tenderAlerts" type="checkbox" checked={tenderAlerts} onChange={(event) => void change(event.target.checked)} />
-        Email me when a new tender is published in my category
-      </label>
-      {problem && <Notice tone="error">{problem}</Notice>}
-    </div>
+    <Card className="mb-6 max-w-3xl">
+      <CardHeader>
+        <h3 className="text-base font-semibold text-navy-dark">Email settings</h3>
+      </CardHeader>
+      <CardContent>
+        <Choice id="tenderAlerts" type="checkbox" checked={tenderAlerts} onChange={(event) => void change(event.target.checked)}>
+          Email me when a new tender is published in my category
+        </Choice>
+        {problem && <Notice tone="error">{problem}</Notice>}
+      </CardContent>
+    </Card>
   );
 }
 

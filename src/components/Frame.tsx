@@ -45,7 +45,7 @@ const visitorLinks: NavigationLink[] = [
 const adminLink: NavigationLink = { to: '/admin', label: 'Admin', isActive: exactly('/admin') };
 
 const container = 'mx-auto w-full max-w-[1440px] px-4 sm:px-8';
-const headerButton = 'cursor-pointer rounded-button px-3 py-[9px] text-sm leading-5 font-medium whitespace-nowrap no-underline transition-colors duration-150 hover:no-underline sm:px-4 md:py-[7px]';
+const headerButton = 'cursor-pointer rounded-button px-2.5 py-[9px] min-[400px]:px-3 text-sm leading-5 font-medium whitespace-nowrap no-underline transition-colors duration-150 hover:no-underline sm:px-4 md:py-[7px]';
 const menuItem = 'flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-ink no-underline transition-colors hover:bg-ink/5 hover:no-underline';
 const menuGapPixels = 8;
 
@@ -92,8 +92,8 @@ function useActiveAccountType(pageAccountType: AccountType | undefined): Account
 function Wordmark({ tone }: { tone: 'ink' | 'white' }) {
   return (
     <Link to="/" className={classNames('flex shrink-0 items-center gap-2.5 no-underline hover:no-underline', tone === 'ink' ? 'text-ink' : 'text-white')}>
-      <img src={tone === 'ink' ? logoMark : logoMarkLight} alt="" width={240} height={134} className="h-8 w-auto shrink-0 sm:h-9" />
-      <span className="font-serif text-[22px] leading-none tracking-[-0.01em] sm:text-[26px]" translate="no">Caribbean Tender</span>
+      <img src={tone === 'ink' ? logoMark : logoMarkLight} alt="" width={240} height={134} className="h-7 w-auto shrink-0 min-[400px]:h-8 sm:h-9" />
+      <span className="font-serif text-[19px] leading-none tracking-[-0.01em] max-[374px]:sr-only min-[400px]:text-[22px] sm:text-[26px]" translate="no">Caribbean Tender</span>
     </Link>
   );
 }
@@ -301,7 +301,7 @@ function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountTyp
       <div ref={topMarker} className="pointer-events-none absolute top-0 left-0 h-10 w-px" aria-hidden="true" />
       <SkipLink />
       <header className={classNames('sticky top-0 z-30 transition-colors duration-200', !isOverPhoto && 'bg-paper/60 shadow-[0_1px_0_rgb(0_32_79/0.08)] backdrop-blur-xl backdrop-saturate-150')}>
-        <div className={classNames(container, 'flex h-16 items-center gap-4 sm:h-[72px] lg:gap-10')}>
+        <div className={classNames(container, 'flex h-16 items-center gap-3 min-[400px]:gap-4 sm:h-[72px] lg:gap-10')}>
           <h1 className="contents">
             <Wordmark tone={isOverPhoto ? 'white' : 'ink'} />
           </h1>
@@ -344,8 +344,8 @@ function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountTyp
         id="main"
         className={classNames(
           'flex-1',
-          // App pages share the header's column, so titles line up under the logo.
-          isFullWidth ? 'marketing-main' : classNames(container, 'pt-10 pb-20 sm:pt-14'),
+          // App pages share the header's column, so titles line up under the logo; full-width pages lay themselves out.
+          !isFullWidth && classNames(container, 'pt-10 pb-20 sm:pt-14'),
           // The photograph fills the first screen, from behind the header down; the footer follows below it.
           hasFormPhoto && 'hills-backdrop -mt-16 grid min-h-dvh place-items-center pt-24 pb-12 sm:-mt-[72px] sm:pt-28 sm:pb-16',
         )}

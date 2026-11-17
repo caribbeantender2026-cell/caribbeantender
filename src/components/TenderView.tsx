@@ -61,7 +61,7 @@ export function TenderView({ tender, now, businessName, businessPicturePath, cat
       <Card>
         <CardHeader className="gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`badge ${tenderPhaseDisplay[phase].badgeStyle}`}>{tenderPhaseDisplay[phase].label}</span>
+            <Badge variant={tenderPhaseDisplay[phase].badgeStyle}>{tenderPhaseDisplay[phase].label}</Badge>
             <Badge variant="outline" className="font-normal">{categoryName}</Badge>
           </div>
           <h2 className="text-2xl leading-tight font-semibold tracking-tight text-navy-dark sm:text-3xl">{tender.title}</h2>

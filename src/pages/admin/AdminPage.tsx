@@ -9,6 +9,11 @@ import { useAccount } from '../../auth/AccountContext.tsx';
 import { useConfirmation } from '../../components/ConfirmDialog.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
+import { Badge } from '../../components/ui/badge.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
+import { Field, Input, NativeSelect } from '../../components/ui/fields.tsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table.tsx';
 import type { Enums } from '../../lib/database.types.ts';
 import { tenderPhaseDisplay, tenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
@@ -51,34 +56,44 @@ function MultiFactorGate({ onVerified }: { onVerified: () => void }) {
   const factorId = enrolment?.factorId ?? factorsQuery.data[0]?.id;
 
   return (
-    <div className="card form">
-      <h3>Verify it's you</h3>
-      {!factorId ? (
-        <>
-          <p>Admin pages need an authenticator app (such as Google Authenticator or 1Password). Set one up once.</p>
-          <button type="button" className="btn" onClick={() => void enrol()}>Set up an authenticator app</button>
-        </>
-      ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void verify(factorId);
-          }}
-        >
-          {enrolment && (
-            <>
-              <p>Scan this code with your authenticator app, or enter the key by hand.</p>
-              <img src={enrolment.qrCode} alt="QR code for your authenticator app" width={200} height={200} />
-              <p className="small">Key: <code>{enrolment.secret}</code></p>
-            </>
-          )}
-          <label htmlFor="totpCode">6-digit code</label>
-          <input id="totpCode" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.trim())} />
-          <button className="btn" type="submit">Verify</button>
-        </form>
-      )}
-      {problem && <Notice tone="error">{problem}</Notice>}
-    </div>
+    <Card className="mb-6 max-w-3xl">
+      <CardHeader>
+        <h3 className="text-base font-semibold text-navy-dark">Verify it's you</h3>
+      </CardHeader>
+      <CardContent>
+        {!factorId ? (
+          <>
+            <p>Admin pages need an authenticator app (such as Google Authenticator or 1Password). Set one up once.</p>
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <Button type="button" onClick={() => void enrol()}>Set up an authenticator app</Button>
+            </div>
+          </>
+        ) : (
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void verify(factorId);
+            }}
+          >
+            {enrolment && (
+              <>
+                <p>Scan this code with your authenticator app, or enter the key by hand.</p>
+                <img src={enrolment.qrCode} alt="QR code for your authenticator app" width={200} height={200} />
+                <p className="text-sm text-muted-foreground">Key: <code>{enrolment.secret}</code></p>
+              </>
+            )}
+            <Field label="6-digit code" htmlFor="totpCode">
+              <Input id="totpCode" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.trim())} />
+            </Field>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="submit">Verify</Button>
+            </div>
+          </form>
+        )}
+        {problem && <Notice tone="error">{problem}</Notice>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -115,40 +130,50 @@ function Users() {
   }
 
   return (
-    <div className="card">
+    <Card className="mb-6">
       {confirmation}
-      <h3>Users</h3>
-      <label htmlFor="userSearch">Search by name, email or company</label>
-      <input id="userSearch" value={search} onChange={(event) => setSearch(event.target.value)} />
-      {problem && <Notice tone="error">{problem}</Notice>}
-      {usersQuery.isPending && <Loading />}
-      {usersQuery.isError && <ErrorNotice error={usersQuery.error} />}
-      {usersQuery.data && (
-        <div className="table-scroll">
-          <table className="table">
-            <thead>
-              <tr><th>Name</th><th>Email</th><th>Accounts</th><th>Trial ends</th><th>Status</th><th>Action</th></tr>
-            </thead>
-            <tbody>
+      <CardHeader>
+        <h3 className="text-base font-semibold text-navy-dark">Users</h3>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Field label="Search by name, email or company" htmlFor="userSearch" className="max-w-sm">
+          <Input id="userSearch" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </Field>
+        {problem && <Notice tone="error">{problem}</Notice>}
+        {usersQuery.isPending && <Loading />}
+        {usersQuery.isError && <ErrorNotice error={usersQuery.error} />}
+        {usersQuery.data && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Accounts</TableHead>
+                <TableHead>Trial ends</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {usersQuery.data.map((user) => (
-                <tr key={user.user_id}>
-                  <td>{user.full_name}{user.staff_role && <> <span className="badge">{user.staff_role}</span></>}</td>
-                  <td>{user.email}</td>
-                  <td>{[user.business_name && `Business: ${user.business_name}`, user.supplier_name && `Supplier: ${user.supplier_name}`].filter(Boolean).join('; ') || '—'}</td>
-                  <td>{user.trial_ends_at ? formatJamaicaDateTime(user.trial_ends_at) : '—'}{user.subscription_status ? ` (${user.subscription_status})` : ''}</td>
-                  <td>{user.is_active ? 'Active' : 'Deactivated'}</td>
-                  <td>
-                    <button type="button" className="btn btn-outline" onClick={() => void setActive(user.user_id, !user.is_active, user.full_name)}>
+                <TableRow key={user.user_id}>
+                  <TableCell>{user.full_name}{user.staff_role && <> <Badge variant="secondary">{user.staff_role}</Badge></>}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{[user.business_name && `Business: ${user.business_name}`, user.supplier_name && `Supplier: ${user.supplier_name}`].filter(Boolean).join('; ') || '—'}</TableCell>
+                  <TableCell>{user.trial_ends_at ? formatJamaicaDateTime(user.trial_ends_at) : '—'}{user.subscription_status ? ` (${user.subscription_status})` : ''}</TableCell>
+                  <TableCell>{user.is_active ? 'Active' : 'Deactivated'}</TableCell>
+                  <TableCell>
+                    <Button type="button" variant="outline" onClick={() => void setActive(user.user_id, !user.is_active, user.full_name)}>
                       {user.is_active ? 'Deactivate' : 'Reactivate'}
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -187,48 +212,59 @@ function Tenders() {
   }
 
   return (
-    <div className="card">
+    <Card className="mb-6">
       {confirmation}
-      <h3>Tenders</h3>
-      <label htmlFor="adminTenderStatus">Status</label>
-      <select id="adminTenderStatus" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'tender_status'> | '')}>
-        <option value="">All published</option>
-        {(['open', 'closed', 'awarded', 'cancelled'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
-      </select>
-      {problem && <Notice tone="error">{problem}</Notice>}
-      {tendersQuery.isPending && <Loading />}
-      {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
-      {tendersQuery.data && (
-        <div className="table-scroll">
-          <table className="table">
-            <thead>
-              <tr><th>Tender</th><th>Business</th><th>Category</th><th>Closes</th><th>Status</th><th>Bids</th><th>Action</th></tr>
-            </thead>
-            <tbody>
+      <CardHeader>
+        <h3 className="text-base font-semibold text-navy-dark">Tenders</h3>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Field label="Status" htmlFor="adminTenderStatus" className="max-w-sm">
+          <NativeSelect id="adminTenderStatus" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'tender_status'> | '')}>
+            <option value="">All published</option>
+            {(['open', 'closed', 'awarded', 'cancelled'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
+          </NativeSelect>
+        </Field>
+        {problem && <Notice tone="error">{problem}</Notice>}
+        {tendersQuery.isPending && <Loading />}
+        {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
+        {tendersQuery.data && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tender</TableHead>
+                <TableHead>Business</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Closes</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Bids</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {tendersQuery.data.map((tender) => {
                 const phase = tenderPhase(tender);
                 return (
-                  <tr key={tender.tender_id}>
-                    <td>{tender.title}</td>
-                    <td>{tender.business_name || '—'}</td>
-                    <td>{tender.category_name || '—'}</td>
-                    <td>{formatJamaicaDateTime(tender.closes_at)}</td>
-                    <td>{tenderPhaseDisplay[phase].label}</td>
+                  <TableRow key={tender.tender_id}>
+                    <TableCell>{tender.title}</TableCell>
+                    <TableCell>{tender.business_name || '—'}</TableCell>
+                    <TableCell>{tender.category_name || '—'}</TableCell>
+                    <TableCell>{formatJamaicaDateTime(tender.closes_at)}</TableCell>
+                    <TableCell>{tenderPhaseDisplay[phase].label}</TableCell>
                     {/* Sealed: no count before the closing time, not even for admins (PRD P1-09). */}
-                    <td>{tender.bid_count ?? 'Sealed'}</td>
-                    <td>
+                    <TableCell>{tender.bid_count ?? 'Sealed'}</TableCell>
+                    <TableCell>
                       {(tender.status === 'open' || tender.status === 'closed') && (
-                        <button type="button" className="btn btn-outline" onClick={() => void cancel(tender.tender_id, tender.title)}>Cancel</button>
+                        <Button type="button" variant="outline" onClick={() => void cancel(tender.tender_id, tender.title)}>Cancel</Button>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -12,6 +12,9 @@ import { useAccount } from '../../auth/AccountContext.tsx';
 import { CategoryOptions } from '../../components/CategoryOptions.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent, CardDescription, CardHeader } from '../../components/ui/card.tsx';
+import { Field, Input, NativeSelect, Textarea } from '../../components/ui/fields.tsx';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, checkDocument, tenderDocumentPath } from '../../lib/documents.ts';
 import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
@@ -110,36 +113,52 @@ function DraftFiles({ tenderId }: { tenderId: string }) {
 
   const fileRows = (files: { name: string; path: string }[]) =>
     files.length === 0 ? (
-      <p className="small">None yet.</p>
+      <p className="text-sm text-muted-foreground">None yet.</p>
     ) : (
-      <ul className="links">
+      <ul className="divide-y">
         {files.map((file) => (
-          <li key={file.path}>
+          <li key={file.path} className="py-3">
             {file.name}{' '}
-            <button type="button" className="link-button" onClick={() => void remove(file.path)}>Remove</button>
+            <button
+              type="button"
+              className="cursor-pointer font-medium text-primary underline underline-offset-4 disabled:cursor-wait disabled:text-muted-foreground"
+              onClick={() => void remove(file.path)}
+            >
+              Remove
+            </button>
           </li>
         ))}
       </ul>
     );
 
   return (
-    <div className="card">
-      <h3>Documents</h3>
-      <p className="small">{acceptedDocumentDescription} each. Files can be changed until you publish.</p>
-      {filesQuery.isPending && <Loading />}
-      {filesQuery.isError && <ErrorNotice error={filesQuery.error} />}
-      <h4>Requirements form (required to publish)</h4>
-      <OnlineRequirementsForm tenderId={tenderId} />
-      {filesQuery.data && fileRows(filesQuery.data.requirements)}
-      <label htmlFor="requirementsUpload">Upload the completed requirements form</label>
-      <input id="requirementsUpload" type="file" accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target.files, true)} />
-      <h4>Supporting documents</h4>
-      {filesQuery.data && fileRows(filesQuery.data.supporting)}
-      <label htmlFor="supportingUpload">Add supporting documents</label>
-      <input id="supportingUpload" type="file" multiple accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target.files, false)} />
-      {isBusy && <p className="small">Uploading…</p>}
-      {problem && <Notice tone="error">{problem}</Notice>}
-    </div>
+    <Card className="mb-6">
+      <CardHeader>
+        <h3 className="text-base font-semibold text-navy-dark">Documents</h3>
+        <CardDescription>{acceptedDocumentDescription} each. Files can be changed until you publish.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-6">
+        {filesQuery.isPending && <Loading />}
+        {filesQuery.isError && <ErrorNotice error={filesQuery.error} />}
+        <div className="grid gap-3">
+          <h4 className="font-semibold">Requirements form (required to publish)</h4>
+          <OnlineRequirementsForm tenderId={tenderId} />
+          {filesQuery.data && fileRows(filesQuery.data.requirements)}
+          <Field label="Upload the completed requirements form" htmlFor="requirementsUpload">
+            <Input id="requirementsUpload" type="file" accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target.files, true)} />
+          </Field>
+        </div>
+        <div className="grid gap-3">
+          <h4 className="font-semibold">Supporting documents</h4>
+          {filesQuery.data && fileRows(filesQuery.data.supporting)}
+          <Field label="Add supporting documents" htmlFor="supportingUpload">
+            <Input id="supportingUpload" type="file" multiple accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target.files, false)} />
+          </Field>
+        </div>
+        {isBusy && <p className="text-sm text-muted-foreground">Uploading…</p>}
+        {problem && <Notice tone="error">{problem}</Notice>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -208,34 +227,34 @@ export function TenderFormPage() {
         }
         back={isNew ? { to: '/business', label: 'My tenders' } : { to: `/business/tenders/${tenderId}`, label: 'Back to the tender' }}
       />
-      <div className="card form">
-        <form onSubmit={form.handleSubmit(save)} noValidate>
-          <label htmlFor="tenderTitle">Title</label>
-          <input id="tenderTitle" maxLength={maximumTitleLength} {...form.register('title')} />
-          {errors.title && <div className="match-error">{errors.title.message}</div>}
-
-          <label htmlFor="tenderCategory">Category</label>
-          <select id="tenderCategory" {...form.register('categoryId')}>
-            <option value="">Choose a category</option>
-            <CategoryOptions categories={categoriesQuery.data ?? []} />
-          </select>
-          {errors.categoryId && <div className="match-error">{errors.categoryId.message}</div>}
-
-          <label htmlFor="tenderDescription">Description</label>
-          <textarea id="tenderDescription" rows={8} {...form.register('description')} />
-          {errors.description && <div className="match-error">{errors.description.message}</div>}
-
-          <label htmlFor="tenderClosesAt">Closing date and time (Jamaica time)</label>
-          <input id="tenderClosesAt" type="datetime-local" {...form.register('closesAtLocal')} />
-          {errors.closesAtLocal && <div className="match-error">{errors.closesAtLocal.message}</div>}
-
-          {problem && <Notice tone="error">{problem}</Notice>}
-          <div className="actions">
-            <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : isNew ? 'Save draft and add documents' : 'Save draft'}</button>
-            <Link className="btn btn-outline" to={isNew ? '/business' : `/business/tenders/${tenderId}`}>Cancel</Link>
-          </div>
-        </form>
-      </div>
+      <Card className="mb-6 max-w-3xl">
+        <CardContent>
+          <form className="grid gap-4" onSubmit={form.handleSubmit(save)} noValidate>
+            <Field label="Title" htmlFor="tenderTitle" error={errors.title?.message}>
+              <Input id="tenderTitle" maxLength={maximumTitleLength} {...form.register('title')} />
+            </Field>
+            <Field label="Category" htmlFor="tenderCategory" error={errors.categoryId?.message}>
+              <NativeSelect id="tenderCategory" {...form.register('categoryId')}>
+                <option value="">Choose a category</option>
+                <CategoryOptions categories={categoriesQuery.data ?? []} />
+              </NativeSelect>
+            </Field>
+            <Field label="Description" htmlFor="tenderDescription" error={errors.description?.message}>
+              <Textarea id="tenderDescription" rows={8} {...form.register('description')} />
+            </Field>
+            <Field label="Closing date and time (Jamaica time)" htmlFor="tenderClosesAt" error={errors.closesAtLocal?.message}>
+              <Input id="tenderClosesAt" type="datetime-local" {...form.register('closesAtLocal')} />
+            </Field>
+            {problem && <Notice tone="error">{problem}</Notice>}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : isNew ? 'Save draft and add documents' : 'Save draft'}</Button>
+              <Button asChild variant="outline">
+                <Link to={isNew ? '/business' : `/business/tenders/${tenderId}`}>Cancel</Link>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
       {!isNew && <DraftFiles tenderId={tenderId} />}
     </>
   );

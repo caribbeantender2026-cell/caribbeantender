@@ -4,11 +4,14 @@
  */
 import type { Enums, Tables } from './database.types.ts';
 
+/** The badge colour for a tender phase; each is a variant of the Badge component. */
+export type PhaseBadge = 'draft' | 'open' | 'waiting' | 'closed' | 'awarded' | 'cancelled';
+
 /** Where a tender stands for bidding and for its sealed bids. */
 export type TenderPhase = 'draft' | 'accepting-bids' | 'awaiting-opening' | 'opened' | 'awarded' | 'cancelled';
 
 /** A short label and badge style for each phase. */
-export const tenderPhaseDisplay: Record<TenderPhase, { label: string; badgeStyle: string }> = {
+export const tenderPhaseDisplay: Record<TenderPhase, { label: string; badgeStyle: PhaseBadge }> = {
   draft: { label: 'Draft', badgeStyle: 'draft' },
   'accepting-bids': { label: 'Open', badgeStyle: 'open' },
   // The close job sets "closed" within a minute of closes_at (OPEN_QUESTIONS.md, item 26).

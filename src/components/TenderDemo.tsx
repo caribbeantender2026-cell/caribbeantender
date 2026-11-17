@@ -15,6 +15,7 @@ import { formatJamaicaDateTime, formatTimeLeft } from '../lib/time.ts';
 import type { RecordedDocument } from './DocumentList.tsx';
 import { Notice } from './Notices.tsx';
 import { BidReceipt, TenderView, useNow } from './TenderView.tsx';
+import { Badge } from './ui/badge.tsx';
 import { Button } from './ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader } from './ui/card.tsx';
 import { Label } from './ui/fields.tsx';
@@ -294,7 +295,7 @@ function BidsList({ step, isAwarded }: { step: Step; isAwarded: boolean }) {
                 <span className="block text-xs text-muted-foreground tabular-nums">{formatAmount(bid.amount)}</span>
               </span>
               {isAwarded ? (
-                <span className={`badge ${status}`}>{bidStatusLabels[status]}</span>
+                <Badge variant={status}>{bidStatusLabels[status]}</Badge>
               ) : (
                 <Button size="sm" variant="outline" {...(isWinner ? targetProps(step, 'award') : {})} className={pointerReaction}>
                   Award to this bid
@@ -315,7 +316,7 @@ function BusinessTenderScreen({ step }: { step: Step }) {
   return (
     <Card className="mx-auto max-w-3xl">
       <CardHeader className="gap-3">
-        <span className={`badge ${display.badgeStyle} justify-self-start`}>{display.label}</span>
+        <Badge variant={display.badgeStyle} className="justify-self-start">{display.label}</Badge>
         <h2 className={headingClasses}>{demoTender.title}</h2>
         <CardDescription>Closes {fieldValues['closes-at']} Jamaica time</CardDescription>
       </CardHeader>
@@ -410,7 +411,7 @@ function MyBidsScreen({ submittedAt }: { submittedAt: string }) {
         <div className="rounded-lg border p-4">
           <div className="flex items-start justify-between gap-3">
             <span className="font-semibold text-navy-dark">{demoTender.title}</span>
-            <span className="badge awarded">{bidStatusLabels.awarded}</span>
+            <Badge variant="awarded">{bidStatusLabels.awarded}</Badge>
           </div>
           <dl className="mt-3 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
             <div>

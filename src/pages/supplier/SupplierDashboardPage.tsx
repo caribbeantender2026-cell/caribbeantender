@@ -1,6 +1,7 @@
 /** My bids: every bid the supplier has submitted, with its receipt, status and documents (PRD P1-10). */
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { Badge } from '../../components/ui/badge.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../../components/ui/card.tsx';
 import { Label, NativeSelect } from '../../components/ui/fields.tsx';
@@ -95,7 +96,7 @@ export function SupplierDashboardPage() {
                 <Link to={`/tenders/${bid.tender_id}`} className="text-navy-dark">{bid.tenderTitle}</Link>
               </CardTitle>
               <CardAction>
-                <span className={`badge ${bid.status}`}>{bidStatusLabels[bid.status]}</span>
+                <Badge variant={bid.status}>{bidStatusLabels[bid.status]}</Badge>
               </CardAction>
             </CardHeader>
             <CardContent>

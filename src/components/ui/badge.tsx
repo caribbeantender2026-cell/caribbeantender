@@ -1,4 +1,4 @@
-/** shadcn/ui badge, for tender and bid statuses. */
+/** shadcn/ui badge, with a variant for each tender phase and bid status. */
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { ComponentProps } from 'react';
@@ -12,6 +12,16 @@ const badgeVariants = cva(
         default: 'border-transparent bg-primary text-primary-foreground',
         secondary: 'border-transparent bg-secondary text-secondary-foreground',
         outline: 'text-foreground',
+        // Tender phases (rules.ts tenderPhaseDisplay) and bid statuses share these names.
+        draft: 'border-transparent bg-muted text-muted-foreground',
+        open: 'border-transparent bg-success/10 text-success',
+        waiting: 'border-transparent bg-gold/15 text-gold-foreground',
+        closed: 'border-transparent bg-accent text-accent-foreground',
+        awarded: 'border-transparent bg-gold text-gold-foreground',
+        cancelled: 'border-transparent bg-destructive/10 text-destructive',
+        submitted: 'border-transparent bg-accent text-accent-foreground',
+        unsuccessful: 'border-transparent bg-muted text-muted-foreground',
+        tender_cancelled: 'border-transparent bg-muted text-muted-foreground',
       },
     },
     defaultVariants: { variant: 'default' },

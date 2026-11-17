@@ -6,6 +6,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { createAccount, loadAccounts, useAccount, type AccountType } from '../../auth/AccountContext.tsx';
 import { Notice } from '../../components/Notices.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent, CardDescription, CardHeader } from '../../components/ui/card.tsx';
+import { Field, Input } from '../../components/ui/fields.tsx';
 import { safeNextPath } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
@@ -58,37 +61,43 @@ export function LoginPage() {
 
   if (needsChoice) {
     return (
-      <div className="card form">
-        <h2>Choose Account</h2>
-        <p>This email has both a Business account and a Supplier account. Choose which one you want to use.</p>
-        <div className="actions">
-          <Link className="btn" to="/business">Business Account</Link>
-          <Link className="btn gold" to="/supplier">Supplier Account</Link>
-        </div>
-      </div>
+      <Card className="w-[calc(100%-2rem)] max-w-md py-8">
+        <CardHeader className="px-8">
+          <h2 className="text-2xl font-semibold tracking-tight text-navy-dark">Choose Account</h2>
+          <p>This email has both a Business account and a Supplier account. Choose which one you want to use.</p>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-2 px-8">
+          <Button asChild><Link to="/business">Business Account</Link></Button>
+          <Button asChild variant="gold"><Link to="/supplier">Supplier Account</Link></Button>
+        </CardContent>
+      </Card>
     );
   }
 
   const { errors, isSubmitting } = form.formState;
   return (
-    <div className="card form">
-      <h2>Log in</h2>
-      <p className="small">Log in with the email address and password used when you registered.</p>
-      {searchParameters.get('reset') === 'success' && <Notice tone="success">Your password was updated. Log in with the new password.</Notice>}
-      <form onSubmit={form.handleSubmit(logIn)} noValidate>
-        <label htmlFor="loginEmail">Email Address</label>
-        <input id="loginEmail" type="email" autoComplete="email" {...form.register('email')} />
-        {errors.email && <div className="match-error">{errors.email.message}</div>}
-        <label htmlFor="loginPassword">Password</label>
-        <input id="loginPassword" type="password" autoComplete="current-password" {...form.register('password')} />
-        {errors.password && <div className="match-error">{errors.password.message}</div>}
-        <div className="password-help"><Link to="/forgot-password">Forgot your password?</Link></div>
-        {problem && <Notice tone="error">{problem}</Notice>}
-        <div className="actions">
-          <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Log in'}</button>
-          <Link className="btn gold" to="/register">Register</Link>
-        </div>
-      </form>
-    </div>
+    <Card className="w-[calc(100%-2rem)] max-w-md py-8">
+      <CardHeader className="px-8">
+        <h2 className="text-2xl font-semibold tracking-tight text-navy-dark">Log in</h2>
+        <CardDescription>Log in with the email address and password used when you registered.</CardDescription>
+      </CardHeader>
+      <CardContent className="px-8">
+        {searchParameters.get('reset') === 'success' && <Notice tone="success">Your password was updated. Log in with the new password.</Notice>}
+        <form className="grid gap-4" onSubmit={form.handleSubmit(logIn)} noValidate>
+          <Field label="Email Address" htmlFor="loginEmail" error={errors.email?.message}>
+            <Input id="loginEmail" type="email" autoComplete="email" {...form.register('email')} />
+          </Field>
+          <Field label="Password" htmlFor="loginPassword" error={errors.password?.message}>
+            <Input id="loginPassword" type="password" autoComplete="current-password" {...form.register('password')} />
+          </Field>
+          <div className="text-right text-sm"><Link to="/forgot-password">Forgot your password?</Link></div>
+          {problem && <Notice tone="error">{problem}</Notice>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Log in'}</Button>
+            <Button asChild variant="gold"><Link to="/register">Register</Link></Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

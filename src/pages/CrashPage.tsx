@@ -4,6 +4,7 @@
  */
 import { useEffect } from 'react';
 import { useRouteError } from 'react-router';
+import { Button } from '../components/ui/button.tsx';
 import { supportEmail } from '../lib/supabase.ts';
 
 // The browsers' wording when a page's code file is gone because a newer deploy replaced it.
@@ -31,8 +32,8 @@ export function CrashPage() {
             : `This page hit an error. Reload to try again. If it keeps happening, email ${supportEmail} and say what you were doing.`}
         </p>
         <div className="mt-6 flex justify-center gap-2">
-          <button type="button" className="btn" onClick={() => window.location.reload()}>Reload</button>
-          <a className="btn btn-outline" href="/">Go to the homepage</a>
+          <Button type="button" onClick={() => window.location.reload()}>Reload</Button>
+          <Button asChild variant="outline"><a href="/">Go to the homepage</a></Button>
         </div>
       </div>
     </main>

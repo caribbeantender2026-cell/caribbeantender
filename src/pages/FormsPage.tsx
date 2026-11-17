@@ -11,6 +11,7 @@ import { FormFields, PdfButton, useFormDefinition } from '../components/FormFiel
 import { ErrorNotice, Loading, Notice } from '../components/Notices.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
 import { Button } from '../components/ui/button.tsx';
+import { Card, CardContent } from '../components/ui/card.tsx';
 import type { Json } from '../lib/database.types.ts';
 import { formProblems, type FormData } from '../lib/forms.ts';
 import { errorMessage, supabase } from '../lib/supabase.ts';
@@ -182,30 +183,36 @@ export function FormFillPage() {
       />
       {tenderId && <Notice>This becomes the requirements form of your draft tender. It is locked once the tender is published.</Notice>}
       {isLocked && <Notice>This form is attached to a submitted bid and can't be changed.</Notice>}
-      <div className="card form">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save();
-          }}
-          noValidate
-        >
-          <fieldset disabled={isLocked}>
-            <FormFields schema={definition.parsedSchema} data={current} onChange={setData} />
-          </fieldset>
-          {problems.length > 0 && (
-            <Notice tone="error">
-              <ul>{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
-            </Notice>
-          )}
-          {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
-          <div className="actions">
-            {!isLocked && <button className="btn" type="submit">{tenderId ? 'Save and attach to the draft' : 'Save'}</button>}
-            <PdfButton title={definition.title} schema={definition.parsedSchema} data={current} fileName={`${formKey}.pdf`} />
-            <Link className="btn btn-outline" to={tenderId ? `/business/tenders/${tenderId}/edit` : '/forms'}>Back</Link>
-          </div>
-        </form>
-      </div>
+      <Card className="max-w-3xl">
+        <CardContent>
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save();
+            }}
+            noValidate
+          >
+            {/* Only here to lock every field at once; min-w-0 stops a wide table stretching it past the card instead of scrolling. */}
+            <fieldset disabled={isLocked} className="min-w-0">
+              <FormFields schema={definition.parsedSchema} data={current} onChange={setData} />
+            </fieldset>
+            {problems.length > 0 && (
+              <Notice tone="error">
+                <ul>{problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+              </Notice>
+            )}
+            {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
+            <div className="flex flex-wrap items-center gap-2">
+              {!isLocked && <Button type="submit">{tenderId ? 'Save and attach to the draft' : 'Save'}</Button>}
+              <PdfButton title={definition.title} schema={definition.parsedSchema} data={current} fileName={`${formKey}.pdf`} />
+              <Button asChild variant="outline">
+                <Link to={tenderId ? `/business/tenders/${tenderId}/edit` : '/forms'}>Back</Link>
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </>
   );
 }

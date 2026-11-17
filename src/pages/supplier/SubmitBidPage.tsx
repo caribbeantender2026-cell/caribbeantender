@@ -12,6 +12,9 @@ import { useConfirmation } from '../../components/ConfirmDialog.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
 import { BidReceipt } from '../../components/TenderView.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent } from '../../components/ui/card.tsx';
+import { Choice, Field, Input } from '../../components/ui/fields.tsx';
 import type { Json } from '../../lib/database.types.ts';
 import { formProblems, type FormData } from '../../lib/forms.ts';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, bidDocumentPath, checkDocument } from '../../lib/documents.ts';
@@ -163,52 +166,53 @@ export function SubmitBidPage() {
     <>
       {header}
       {confirmation}
-      <div className="card form">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-          noValidate
-        >
-          <label htmlFor="bidAmount">Amount (Jamaican dollars, JMD)</label>
-          <div className="amount-field">
-            <span className="currency-prefix">J$</span>
-            <input id="bidAmount" inputMode="decimal" value={amountText} onChange={(event) => setAmountText(event.target.value)} required />
-          </div>
+      <Card className="max-w-3xl">
+        <CardContent>
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit();
+            }}
+            noValidate
+          >
+            <Field label="Amount (Jamaican dollars, JMD)" htmlFor="bidAmount">
+              <div className="flex">
+                <span className="flex items-center rounded-l-md border border-r-0 bg-muted px-3 text-sm font-semibold text-navy-dark">J$</span>
+                <Input id="bidAmount" inputMode="decimal" className="rounded-l-none" value={amountText} onChange={(event) => setAmountText(event.target.value)} required />
+              </div>
+            </Field>
 
-          <fieldset>
-            <legend>Proposal (required)</legend>
-            <label className="checkbox" htmlFor="proposalFile">
-              <input id="proposalFile" type="radio" name="proposalMode" checked={proposalMode === 'file'} onChange={() => setProposalMode('file')} />
-              Upload my proposal
-            </label>
-            <label className="checkbox" htmlFor="proposalOnline">
-              <input id="proposalOnline" type="radio" name="proposalMode" checked={proposalMode === 'online'} onChange={() => setProposalMode('online')} />
-              Fill in the supplier proposal form online
-            </label>
-          </fieldset>
-          {proposalMode === 'file' ? (
-            <>
-              <label htmlFor="bidProposal">Proposal file</label>
-              <input id="bidProposal" type="file" accept={acceptedDocumentExtensions} onChange={(event) => setProposal(event.target.files?.[0] ?? null)} />
-            </>
-          ) : proposalDefinitionQuery.data ? (
-            <FormFields schema={proposalDefinitionQuery.data.parsedSchema} data={proposalData} onChange={setProposalData} idPrefix="proposal" />
-          ) : (
-            <Loading />
-          )}
+            <fieldset className="rounded-md border px-4 pt-1 pb-3">
+              <legend className="px-1 text-sm font-medium">Proposal (required)</legend>
+              <Choice className="mt-3" id="proposalFile" type="radio" name="proposalMode" checked={proposalMode === 'file'} onChange={() => setProposalMode('file')}>
+                Upload my proposal
+              </Choice>
+              <Choice className="mt-3" id="proposalOnline" type="radio" name="proposalMode" checked={proposalMode === 'online'} onChange={() => setProposalMode('online')}>
+                Fill in the supplier proposal form online
+              </Choice>
+            </fieldset>
+            {proposalMode === 'file' ? (
+              <Field label="Proposal file" htmlFor="bidProposal">
+                <Input id="bidProposal" type="file" accept={acceptedDocumentExtensions} onChange={(event) => setProposal(event.target.files?.[0] ?? null)} />
+              </Field>
+            ) : proposalDefinitionQuery.data ? (
+              <FormFields schema={proposalDefinitionQuery.data.parsedSchema} data={proposalData} onChange={setProposalData} idPrefix="proposal" />
+            ) : (
+              <Loading />
+            )}
 
-          <label htmlFor="bidSupporting">Supporting documents (optional)</label>
-          <input id="bidSupporting" type="file" multiple accept={acceptedDocumentExtensions} onChange={(event) => setSupportingFiles(Array.from(event.target.files ?? []))} />
-          <p className="small">{acceptedDocumentDescription} each.</p>
+            <Field label="Supporting documents (optional)" htmlFor="bidSupporting" hint={`${acceptedDocumentDescription} each.`}>
+              <Input id="bidSupporting" type="file" multiple accept={acceptedDocumentExtensions} onChange={(event) => setSupportingFiles(Array.from(event.target.files ?? []))} />
+            </Field>
 
-          {problem && <Notice tone="error">{problem}</Notice>}
-          <div className="actions">
-            <button className="btn gold" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting…' : 'Submit sealed bid'}</button>
-          </div>
-        </form>
-      </div>
+            {problem && <Notice tone="error">{problem}</Notice>}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="gold" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Submitting…' : 'Submit sealed bid'}</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </>
   );
 }

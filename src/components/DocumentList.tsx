@@ -19,7 +19,7 @@ export function DocumentList({ documents }: { documents: RecordedDocument[] }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   if (documents.length === 0) {
-    return <p className="small">No documents.</p>;
+    return <p className="text-sm text-muted-foreground">No documents.</p>;
   }
 
   async function download(documentId: string) {
@@ -41,7 +41,12 @@ export function DocumentList({ documents }: { documents: RecordedDocument[] }) {
           <li key={document.id} className="flex items-center gap-3 px-3 py-2.5">
             <FileTextIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <div className="min-w-0 flex-1">
-              <button type="button" className="link-button max-w-full truncate text-left" disabled={downloadingId !== null} onClick={() => void download(document.id)}>
+              <button
+                type="button"
+                className="max-w-full cursor-pointer truncate text-left font-medium text-primary underline underline-offset-4 disabled:cursor-wait disabled:text-muted-foreground"
+                disabled={downloadingId !== null}
+                onClick={() => void download(document.id)}
+              >
                 {document.file_name}
               </button>
               <p className="text-xs text-muted-foreground tabular-nums">

@@ -5,6 +5,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Notice } from '../../components/Notices.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
+import { Field, Input } from '../../components/ui/fields.tsx';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
 const minimumPasswordLength = 8;
@@ -52,31 +55,35 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="card form recovery-card">
-      <h2>Reset Password</h2>
-      <p>Enter your new password below. Both password fields must match.</p>
-      {linkState === 'verifying' && <Notice>Verifying your password-reset link…</Notice>}
-      {linkState === 'invalid' && (
-        <Notice tone="error">
-          This password-reset link is invalid or has expired. <Link to="/forgot-password">Request a new reset link</Link>.
-        </Notice>
-      )}
-      {linkState === 'ready' && (
-        <form onSubmit={form.handleSubmit(updatePassword)} noValidate>
-          <label htmlFor="newPassword">New Password</label>
-          <input id="newPassword" type="password" autoComplete="new-password" {...form.register('password')} />
-          {errors.password && <div className="match-error">{errors.password.message}</div>}
-          <label htmlFor="confirmNewPassword">Confirm New Password</label>
-          <input id="confirmNewPassword" type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
-          {errors.confirmPassword && <div className="match-error">{errors.confirmPassword.message}</div>}
-          <div className="password-rules small">Use at least {minimumPasswordLength} characters. A longer passphrase is recommended.</div>
-          {problem && <Notice tone="error">{problem}</Notice>}
-          <div className="actions">
-            <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Updating…' : 'Update Password'}</button>
-            <Link className="btn gold" to="/login">Back to Login</Link>
-          </div>
-        </form>
-      )}
-    </div>
+    <Card className="w-[calc(100%-2rem)] max-w-md py-8">
+      <CardHeader className="px-8">
+        <h2 className="text-2xl font-semibold tracking-tight text-navy-dark">Reset Password</h2>
+        <p>Enter your new password below. Both password fields must match.</p>
+      </CardHeader>
+      <CardContent className="px-8">
+        {linkState === 'verifying' && <Notice>Verifying your password-reset link…</Notice>}
+        {linkState === 'invalid' && (
+          <Notice tone="error">
+            This password-reset link is invalid or has expired. <Link to="/forgot-password">Request a new reset link</Link>.
+          </Notice>
+        )}
+        {linkState === 'ready' && (
+          <form className="grid gap-4" onSubmit={form.handleSubmit(updatePassword)} noValidate>
+            <Field label="New Password" htmlFor="newPassword" error={errors.password?.message}>
+              <Input id="newPassword" type="password" autoComplete="new-password" {...form.register('password')} />
+            </Field>
+            <Field label="Confirm New Password" htmlFor="confirmNewPassword" error={errors.confirmPassword?.message}>
+              <Input id="confirmNewPassword" type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
+            </Field>
+            <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">Use at least {minimumPasswordLength} characters. A longer passphrase is recommended.</div>
+            {problem && <Notice tone="error">{problem}</Notice>}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Updating…' : 'Update Password'}</Button>
+              <Button asChild variant="gold"><Link to="/login">Back to Login</Link></Button>
+            </div>
+          </form>
+        )}
+      </CardContent>
+    </Card>
   );
 }

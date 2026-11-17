@@ -1,9 +1,13 @@
 /** Fills in, shows and downloads a form defined as data (PRD P1-11); no form needs its own interface code. */
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { classNames } from '../lib/classNames.ts';
 import { displayValue, grandTotal, lineTotal, readSchema, showsLineTotal, tableRows, type FormData, type FormField, type FormRow, type FormSchema } from '../lib/forms.ts';
 import { errorMessage, supabase } from '../lib/supabase.ts';
 import { Notice } from './Notices.tsx';
+import { Button } from './ui/button.tsx';
+import { Choice, Field, Input, Textarea } from './ui/fields.tsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table.tsx';
 
 /** The newest active version of a form, with its schema read defensively. */
 export function useFormDefinition(formKey: string) {
@@ -41,21 +45,21 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
   const setCell = (rowIndex: number, column: string, value: string | number | null) =>
     onChange(rows.map((row, index) => (index === rowIndex ? { ...row, [column]: value } : row)));
   return (
-    <div className="table-scroll">
-      <table className="table">
-        <thead>
-          <tr>
-            {columns.map((column) => <th key={column.name} scope="col">{column.label}</th>)}
-            {field.lineTotal && showsLineTotal(field.lineTotal) && <th scope="col">{field.lineTotal.label}</th>}
-            <th scope="col"><span className="visually-hidden">Remove</span></th>
-          </tr>
-        </thead>
-        <tbody>
+    <div className="grid min-w-0 gap-3">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {columns.map((column) => <TableHead key={column.name} scope="col">{column.label}</TableHead>)}
+            {field.lineTotal && showsLineTotal(field.lineTotal) && <TableHead scope="col">{field.lineTotal.label}</TableHead>}
+            <TableHead scope="col"><span className="sr-only">Remove</span></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <TableRow key={rowIndex}>
               {columns.map((column) => (
-                <td key={column.name}>
-                  <input
+                <TableCell key={column.name}>
+                  <Input
                     aria-label={`${column.label}, row ${rowIndex + 1}`}
                     id={`${idPrefix}-${rowIndex}-${column.name}`}
                     inputMode={column.type === 'number' ? 'decimal' : undefined}
@@ -63,15 +67,23 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
                     value={row[column.name] ?? ''}
                     onChange={(event) => setCell(rowIndex, column.name, column.type === 'number' ? numberOrNull(event.target.value) : event.target.value)}
                   />
-                </td>
+                </TableCell>
               ))}
-              {field.lineTotal && showsLineTotal(field.lineTotal) && <td>{displayValue(lineTotal(row, field.lineTotal))}</td>}
-              <td><button type="button" className="link-button" onClick={() => onChange(rows.filter((_, index) => index !== rowIndex))}>Remove</button></td>
-            </tr>
+              {field.lineTotal && showsLineTotal(field.lineTotal) && <TableCell>{displayValue(lineTotal(row, field.lineTotal))}</TableCell>}
+              <TableCell>
+                <button
+                  type="button"
+                  className="cursor-pointer font-medium text-primary underline underline-offset-4 disabled:cursor-wait disabled:text-muted-foreground"
+                  onClick={() => onChange(rows.filter((_, index) => index !== rowIndex))}
+                >
+                  Remove
+                </button>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-      <button type="button" className="btn btn-outline" onClick={() => onChange([...rows, {}])}>Add a row</button>
+        </TableBody>
+      </Table>
+      <Button variant="outline" type="button" className="justify-self-start" onClick={() => onChange([...rows, {}])}>Add a row</Button>
       {field.lineTotal && field.grandTotal && <p><strong>{field.grandTotal.label}: {displayValue(grandTotal(rows, field.lineTotal))}</strong></p>}
     </div>
   );
@@ -80,7 +92,8 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
 /** Inputs for every field of a form. */
 export function FormFields({ schema, data, onChange, idPrefix = 'form' }: { schema: FormSchema; data: FormData; onChange: (data: FormData) => void; idPrefix?: string }) {
   return (
-    <>
+    // min-w-0 here and on the table wrappers lets a wide table scroll inside its card instead of stretching the grids around it.
+    <div className="grid min-w-0 gap-4">
       {schema.description && <Notice>{schema.description}</Notice>}
       {schema.fields.map((field, index) => {
         const id = `${idPrefix}-${field.name}`;
@@ -88,48 +101,51 @@ export function FormFields({ schema, data, onChange, idPrefix = 'form' }: { sche
         const set = (next: FormData[string]) => onChange({ ...data, [field.name]: next });
         const label = `${field.label}${field.required ? '' : ' (optional)'}`;
         const startsSection = field.section && field.section !== schema.fields[index - 1]?.section;
-        const heading = startsSection ? <h3 className="form-section">{field.section}</h3> : null;
+        // A section that opens the form needs no gap above it; later ones are set apart from the fields before.
+        const heading = startsSection ? <h3 className={classNames('border-b pb-2 text-base font-semibold text-navy-dark', index > 0 && 'mt-6')}>{field.section}</h3> : null;
         if (field.type === 'choice' || field.type === 'checkboxes') {
           const isChoice = field.type === 'choice';
           const chosen = isChoice ? (typeof value === 'string' ? [value] : []) : Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
           return (
-            <div key={field.name}>
+            <Fragment key={field.name}>
               {heading}
-              <fieldset>
-                <legend>{label}</legend>
+              <fieldset className="rounded-md border px-4 pt-1 pb-3">
+                <legend className="px-1 text-sm font-medium">{label}</legend>
                 {(field.options ?? []).map((option, optionIndex) => (
-                  <label key={option} className="checkbox" htmlFor={`${id}-${optionIndex}`}>
-                    <input
-                      id={`${id}-${optionIndex}`}
-                      type={isChoice ? 'radio' : 'checkbox'}
-                      name={id}
-                      checked={chosen.includes(option)}
-                      onChange={(event) => set(isChoice ? option : event.target.checked ? [...chosen, option] : chosen.filter((item) => item !== option))}
-                    />
+                  <Choice
+                    key={option}
+                    className="mt-3"
+                    id={`${id}-${optionIndex}`}
+                    type={isChoice ? 'radio' : 'checkbox'}
+                    name={id}
+                    checked={chosen.includes(option)}
+                    onChange={(event) => set(isChoice ? option : event.target.checked ? [...chosen, option] : chosen.filter((item) => item !== option))}
+                  >
                     {option}
-                  </label>
+                  </Choice>
                 ))}
               </fieldset>
-            </div>
+            </Fragment>
           );
         }
         return (
-          <div key={field.name}>
+          <Fragment key={field.name}>
             {heading}
-            <label htmlFor={id}>{label}</label>
-            {field.type === 'table' ? (
-              <TableField field={field} rows={tableRows(value)} onChange={set} idPrefix={id} />
-            ) : field.type === 'textarea' ? (
-              <textarea id={id} rows={5} maxLength={field.maxLength} value={typeof value === 'string' ? value : ''} onChange={(event) => set(event.target.value)} />
-            ) : field.type === 'number' ? (
-              <input id={id} inputMode="decimal" value={value === null || value === undefined ? '' : String(value)} onChange={(event) => set(numberOrNull(event.target.value))} />
-            ) : (
-              <input id={id} type={inputTypes[field.type] ?? 'text'} maxLength={field.maxLength} value={typeof value === 'string' ? value : ''} onChange={(event) => set(event.target.value)} />
-            )}
-          </div>
+            <Field label={label} htmlFor={id}>
+              {field.type === 'table' ? (
+                <TableField field={field} rows={tableRows(value)} onChange={set} idPrefix={id} />
+              ) : field.type === 'textarea' ? (
+                <Textarea id={id} rows={5} maxLength={field.maxLength} value={typeof value === 'string' ? value : ''} onChange={(event) => set(event.target.value)} />
+              ) : field.type === 'number' ? (
+                <Input id={id} inputMode="decimal" value={value === null || value === undefined ? '' : String(value)} onChange={(event) => set(numberOrNull(event.target.value))} />
+              ) : (
+                <Input id={id} type={inputTypes[field.type] ?? 'text'} maxLength={field.maxLength} value={typeof value === 'string' ? value : ''} onChange={(event) => set(event.target.value)} />
+              )}
+            </Field>
+          </Fragment>
         );
       })}
-    </>
+    </div>
   );
 }
 
@@ -138,34 +154,32 @@ export function FormAnswers({ schema, data }: { schema: FormSchema; data: FormDa
   const known = new Set(schema.fields.map((field) => field.name));
   const unknownKeys = Object.keys(data).filter((key) => !known.has(key));
   return (
-    <dl className="details">
+    <dl className="my-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm [&>dt]:text-muted-foreground">
       {schema.fields.map((field) => {
         const value = data[field.name];
         if (field.type !== 'table') {
-          return [<dt key={`${field.name}-label`}>{field.label}</dt>, <dd key={field.name} className="preserve-lines">{displayValue(value) || '—'}</dd>];
+          return [<dt key={`${field.name}-label`}>{field.label}</dt>, <dd key={field.name} className="whitespace-pre-line">{displayValue(value) || '—'}</dd>];
         }
         const rows = tableRows(value);
         return [
           <dt key={`${field.name}-label`}>{field.label}</dt>,
-          <dd key={field.name}>
-            <div className="table-scroll">
-              <table className="table">
-                <thead>
-                  <tr>
-                    {(field.columns ?? []).map((column) => <th key={column.name} scope="col">{column.label}</th>)}
-                    {field.lineTotal && showsLineTotal(field.lineTotal) && <th scope="col">{field.lineTotal.label}</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={index}>
-                      {(field.columns ?? []).map((column) => <td key={column.name}>{displayValue(row[column.name])}</td>)}
-                      {field.lineTotal && showsLineTotal(field.lineTotal) && <td>{displayValue(lineTotal(row, field.lineTotal))}</td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <dd key={field.name} className="min-w-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {(field.columns ?? []).map((column) => <TableHead key={column.name} scope="col">{column.label}</TableHead>)}
+                  {field.lineTotal && showsLineTotal(field.lineTotal) && <TableHead scope="col">{field.lineTotal.label}</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row, index) => (
+                  <TableRow key={index}>
+                    {(field.columns ?? []).map((column) => <TableCell key={column.name}>{displayValue(row[column.name])}</TableCell>)}
+                    {field.lineTotal && showsLineTotal(field.lineTotal) && <TableCell>{displayValue(lineTotal(row, field.lineTotal))}</TableCell>}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
             {field.lineTotal && field.grandTotal && <strong>{field.grandTotal.label}: {displayValue(grandTotal(rows, field.lineTotal))}</strong>}
           </dd>,
         ];
@@ -189,7 +203,7 @@ export function PdfButton({ title, schema, data, fileName, notes = [] }: { title
   }
   return (
     <>
-      <button type="button" className="btn btn-outline" onClick={() => void download()}>Download as PDF</button>
+      <Button variant="outline" type="button" onClick={() => void download()}>Download as PDF</Button>
       {problem && <Notice tone="error">{problem}</Notice>}
     </>
   );
@@ -209,8 +223,8 @@ export function AttachedForm({ formKey, formVersion, data, notes = [] }: { formK
   if (!definitionQuery.data) return null;
   const { title, schema } = definitionQuery.data;
   return (
-    <div className="card">
-      <h4>{title}</h4>
+    <div className="mt-4 rounded-lg border p-4">
+      <h4 className="mb-2 font-semibold">{title}</h4>
       <FormAnswers schema={schema} data={data} />
       <PdfButton title={title} schema={schema} data={data} fileName={`${formKey}.pdf`} notes={notes} />
     </div>

@@ -9,6 +9,11 @@ import { formatAmount } from '../lib/queries.ts';
 import type { FormData, FormSchema } from '../lib/forms.ts';
 import { supabase } from '../lib/supabase.ts';
 import { FormFields } from './FormFields.tsx';
+import { Notice } from './Notices.tsx';
+import { Badge } from './ui/badge.tsx';
+import { Button } from './ui/button.tsx';
+import { Card } from './ui/card.tsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table.tsx';
 
 // A shortened copy of each draft form, for practice only.
 const demoRequirementsForm: FormSchema = {
@@ -37,9 +42,9 @@ const demoProposalForm: FormSchema = {
 
 function SampleTender() {
   return (
-    <div className="card">
+    <div className="mt-4 rounded-xl border p-6">
       <strong>Sample: 40 ergonomic office chairs</strong>
-      <p className="small">Office furniture · closes 30 Nov 2026, 5:00 pm Jamaica time · <span className="badge open">Open</span></p>
+      <p className="text-sm text-muted-foreground">Office furniture · closes 30 Nov 2026, 5:00 pm Jamaica time · <Badge variant="open">Open</Badge></p>
     </div>
   );
 }
@@ -50,18 +55,18 @@ function businessSteps(form: FormData, setForm: (data: FormData) => void): Step[
   return [
     { title: 'Post a tender', text: 'Give it a title, a category, a description and a closing time. Save it as a draft until it is ready.', demo: <SampleTender /> },
     { title: 'Attach the requirements form', text: 'Fill in the requirements form online, or upload your own. Try it here; nothing is saved.', demo: <FormFields schema={demoRequirementsForm} data={form} onChange={setForm} idPrefix="tour-requirements" /> },
-    { title: 'Bids arrive sealed', text: 'Suppliers bid until the closing time. Nobody, not even you, can see a bid, or how many there are, before then.', demo: <div className="card"><p>Bids: <strong>sealed until 30 Nov 2026, 5:00 pm</strong></p></div> },
+    { title: 'Bids arrive sealed', text: 'Suppliers bid until the closing time. Nobody, not even you, can see a bid, or how many there are, before then.', demo: <div className="mt-4 rounded-xl border p-6"><p>Bids: <strong>sealed until 30 Nov 2026, 5:00 pm</strong></p></div> },
     {
       title: 'Bids open at the closing time',
       text: 'From the closing time you see every bid, with the supplier\'s name, amount, documents and proposal form.',
       demo: (
-        <table className="table">
-          <thead><tr><th>Supplier</th><th>Amount</th></tr></thead>
-          <tbody>
-            <tr><td>Sample Furniture Ltd</td><td>{formatAmount(98_000)}</td></tr>
-            <tr><td>Sample Office Supplies</td><td>{formatAmount(104_500)}</td></tr>
-          </tbody>
-        </table>
+        <Table>
+          <TableHeader><TableRow><TableHead>Supplier</TableHead><TableHead>Amount</TableHead></TableRow></TableHeader>
+          <TableBody>
+            <TableRow><TableCell>Sample Furniture Ltd</TableCell><TableCell>{formatAmount(98_000)}</TableCell></TableRow>
+            <TableRow><TableCell>Sample Office Supplies</TableCell><TableCell>{formatAmount(104_500)}</TableCell></TableRow>
+          </TableBody>
+        </Table>
       ),
     },
     { title: 'Award one bid', text: 'Choose the winning bid. The others are marked unsuccessful. You can cancel an open or closed tender instead, with a reason.' },
@@ -77,7 +82,7 @@ function supplierSteps(form: FormData, setForm: (data: FormData) => void): Step[
     {
       title: 'Keep the receipt',
       text: 'You get a receipt with the exact submission time, on screen and by email. My bids shows every bid and its outcome.',
-      demo: <div className="notice success">Sample receipt: {formatAmount(98_000)}, submitted 28 Nov 2026, 2:14:07 pm Jamaica time.</div>,
+      demo: <Notice tone="success">Sample receipt: {formatAmount(98_000)}, submitted 28 Nov 2026, 2:14:07 pm Jamaica time.</Notice>,
     },
   ];
 }
@@ -100,22 +105,23 @@ export function Tour({ accountType, onClose }: { accountType: AccountType; onClo
   }
 
   return (
-    <div className="tour-backdrop">
-      <div className="tour card" role="dialog" aria-modal="true" aria-labelledby="tourHeading" onKeyDown={(event) => event.key === 'Escape' && void finish()}>
-        <p className="small">How CaribbeanTender works for {accountType === 'business' ? 'businesses' : 'suppliers'} · step {stepIndex + 1} of {steps.length}</p>
-        <h3 id="tourHeading" ref={headingRef} tabIndex={-1}>{step?.title}</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-dark/60 p-4 backdrop-blur-sm">
+      {/* gap-0: the space differs between parts (more above the heading than below it), so each part sets its own margin. */}
+      <Card className="max-h-[90vh] w-full max-w-xl gap-0 overflow-y-auto p-6" role="dialog" aria-modal="true" aria-labelledby="tourHeading" onKeyDown={(event) => event.key === 'Escape' && void finish()}>
+        <p className="text-sm text-muted-foreground">How CaribbeanTender works for {accountType === 'business' ? 'businesses' : 'suppliers'} · step {stepIndex + 1} of {steps.length}</p>
+        <h3 id="tourHeading" ref={headingRef} tabIndex={-1} className="mt-6 mb-3 text-base font-semibold text-navy-dark">{step?.title}</h3>
         <p>{step?.text}</p>
         {step?.demo}
-        <div className="actions">
-          {stepIndex > 0 && <button type="button" className="btn btn-outline" onClick={() => setStepIndex(stepIndex - 1)}>Back</button>}
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          {stepIndex > 0 && <Button type="button" variant="outline" onClick={() => setStepIndex(stepIndex - 1)}>Back</Button>}
           {stepIndex < steps.length - 1 ? (
-            <button type="button" className="btn" onClick={() => setStepIndex(stepIndex + 1)}>Next</button>
+            <Button type="button" onClick={() => setStepIndex(stepIndex + 1)}>Next</Button>
           ) : (
-            <button type="button" className="btn gold" onClick={() => void finish()}>Finish</button>
+            <Button type="button" variant="gold" onClick={() => void finish()}>Finish</Button>
           )}
-          <button type="button" className="link-button" onClick={() => void finish()}>Skip the tour</button>
+          <button type="button" className="cursor-pointer font-medium text-primary underline underline-offset-4" onClick={() => void finish()}>Skip the tour</button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

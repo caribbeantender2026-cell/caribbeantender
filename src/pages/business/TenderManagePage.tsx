@@ -13,6 +13,10 @@ import type { FormData } from '../../lib/forms.ts';
 import { useConfirmation } from '../../components/ConfirmDialog.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
+import { Badge } from '../../components/ui/badge.tsx';
+import { Button } from '../../components/ui/button.tsx';
+import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
+import { Field, Input, Textarea } from '../../components/ui/fields.tsx';
 import { formatAmount, useCompanies } from '../../lib/queries.ts';
 import { tenderPhase, tenderPhaseDisplay, type TenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
@@ -21,6 +25,7 @@ import { useTender } from '../TenderDetailsPage.tsx';
 import { listDraftFiles } from './TenderFormPage.tsx';
 
 const maximumReasonLength = 1000;
+const sectionHeadingClasses = 'mt-6 mb-3 text-base font-semibold text-navy-dark';
 
 // What the business can do next, in plain words, for each phase of its tender.
 const phaseGuidance: Record<TenderPhase, string> = {
@@ -70,28 +75,34 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
       {confirmation}
       {bidsQuery.data.length === 0 && <p>No bids were submitted.</p>}
       {bidsQuery.data.map((bid) => (
-        <div className="card" key={bid.bid_id}>
-          <div className="flex items-center gap-2.5">
-            <AccountPicture picturePath={suppliersQuery.data?.get(bid.supplier_id)?.picturePath} />
-            <h4>{bid.supplier_company_name || 'Supplier'}</h4>
-          </div>
-          <p>
-            <strong>{formatAmount(bid.amount, bid.currency)}</strong> · submitted {formatJamaicaDateTime(bid.submitted_at, { withSeconds: true })} ·{' '}
-            <span className={`badge ${bid.status}`}>{bid.status.replace('_', ' ')}</span>
-          </p>
-          <DocumentList
-            documents={(bid.documents as BidDocument[]).map((document) => ({ ...document, id: document.document_id }))}
-          />
-          {bid.proposal_form !== null && (() => {
-            const proposal = bid.proposal_form as { form_key: string; form_version: number; data: FormData };
-            return <AttachedForm formKey={proposal.form_key} formVersion={proposal.form_version} data={proposal.data} notes={[`Proposal from ${bid.supplier_company_name || 'a supplier'}`]} />;
-          })()}
-          {canAward && (
-            <button type="button" className="btn gold" onClick={() => void award(bid.bid_id, bid.supplier_company_name || 'this supplier')}>
-              Award to this bid
-            </button>
-          )}
-        </div>
+        <Card className="mb-6" key={bid.bid_id}>
+          <CardHeader>
+            <div className="flex items-center gap-2.5">
+              <AccountPicture picturePath={suppliersQuery.data?.get(bid.supplier_id)?.picturePath} />
+              <h4 className="font-semibold">{bid.supplier_company_name || 'Supplier'}</h4>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p>
+              <strong>{formatAmount(bid.amount, bid.currency)}</strong> · submitted {formatJamaicaDateTime(bid.submitted_at, { withSeconds: true })} ·{' '}
+              <Badge variant={bid.status}>{bid.status.replace('_', ' ')}</Badge>
+            </p>
+            <DocumentList
+              documents={(bid.documents as BidDocument[]).map((document) => ({ ...document, id: document.document_id }))}
+            />
+            {bid.proposal_form !== null && (() => {
+              const proposal = bid.proposal_form as { form_key: string; form_version: number; data: FormData };
+              return <AttachedForm formKey={proposal.form_key} formVersion={proposal.form_version} data={proposal.data} notes={[`Proposal from ${bid.supplier_company_name || 'a supplier'}`]} />;
+            })()}
+            {canAward && (
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <Button type="button" variant="gold" onClick={() => void award(bid.bid_id, bid.supplier_company_name || 'this supplier')}>
+                  Award to this bid
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       ))}
       {problem && <Notice tone="error">{problem}</Notice>}
     </>
@@ -166,105 +177,115 @@ export function TenderManagePage() {
     <>
       <PageHeader title={tender.title} description={phaseGuidance[phase]} back={{ to: '/business', label: 'My tenders' }} />
       {confirmation}
-      <div className="card">
-        <p>
-          <span className={`badge ${tenderPhaseDisplay[phase].badgeStyle}`}>{tenderPhaseDisplay[phase].label}</span>{' '}
-          Closes {formatJamaicaDateTime(tender.closes_at)} Jamaica time
-        </p>
-        <h3>History</h3>
-        <ul className="links">
-          {history
-            .filter(([, moment]) => moment !== null)
-            .map(([label, moment]) => (
-              <li key={label}>{label}: {formatJamaicaDateTime(moment ?? '')}</li>
-            ))}
-          {tender.cancelled_reason && <li className="preserve-lines">Reason: {tender.cancelled_reason}</li>}
-        </ul>
-        {phase !== 'draft' && (
-          <>
-            <h3>Documents</h3>
-            <DocumentList documents={tenderQuery.data.documents} />
-          </>
-        )}
-        {tenderQuery.data.requirementsForm && (
-          <AttachedForm
-            formKey={tenderQuery.data.requirementsForm.form_key}
-            formVersion={tenderQuery.data.requirementsForm.form_version}
-            data={tenderQuery.data.requirementsForm.data as FormData}
-            notes={[`Requirements form for the tender "${tender.title}"`]}
-          />
-        )}
-        {problem && <Notice tone="error">{problem}</Notice>}
+      <Card className="mb-6">
+        <CardContent>
+          <p>
+            <Badge variant={tenderPhaseDisplay[phase].badgeStyle}>{tenderPhaseDisplay[phase].label}</Badge>{' '}
+            Closes {formatJamaicaDateTime(tender.closes_at)} Jamaica time
+          </p>
+          <h3 className={sectionHeadingClasses}>History</h3>
+          <ul className="divide-y">
+            {history
+              .filter(([, moment]) => moment !== null)
+              .map(([label, moment]) => (
+                <li key={label} className="py-3">{label}: {formatJamaicaDateTime(moment ?? '')}</li>
+              ))}
+            {tender.cancelled_reason && <li className="py-3 whitespace-pre-line">Reason: {tender.cancelled_reason}</li>}
+          </ul>
+          {phase !== 'draft' && (
+            <>
+              <h3 className={sectionHeadingClasses}>Documents</h3>
+              <DocumentList documents={tenderQuery.data.documents} />
+            </>
+          )}
+          {tenderQuery.data.requirementsForm && (
+            <AttachedForm
+              formKey={tenderQuery.data.requirementsForm.form_key}
+              formVersion={tenderQuery.data.requirementsForm.form_version}
+              data={tenderQuery.data.requirementsForm.data as FormData}
+              notes={[`Requirements form for the tender "${tender.title}"`]}
+            />
+          )}
+          {problem && <Notice tone="error">{problem}</Notice>}
 
-        {phase === 'draft' && (
-          <div className="actions">
-            <Link className="btn" to={`/business/tenders/${tender.id}/edit`}>Edit draft and documents</Link>
-            <button
-              type="button"
-              className="btn gold"
-              onClick={async () => {
-                const { isConfirmed } = await askToConfirm({
-                  title: 'Publish this tender?',
-                  message: 'Suppliers can see it and bid, and those in its category get an email. After publishing you can only extend the closing time or cancel it.',
-                  confirmLabel: 'Publish',
-                  cancelLabel: 'Not yet',
-                  tone: 'go-ahead',
-                });
-                if (isConfirmed) void act(() => supabase.rpc('publish_tender', { tender_id: tender.id }));
+          {phase === 'draft' && (
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <Button asChild>
+                <Link to={`/business/tenders/${tender.id}/edit`}>Edit draft and documents</Link>
+              </Button>
+              <Button
+                type="button"
+                variant="gold"
+                onClick={async () => {
+                  const { isConfirmed } = await askToConfirm({
+                    title: 'Publish this tender?',
+                    message: 'Suppliers can see it and bid, and those in its category get an email. After publishing you can only extend the closing time or cancel it.',
+                    confirmLabel: 'Publish',
+                    cancelLabel: 'Not yet',
+                    tone: 'go-ahead',
+                  });
+                  if (isConfirmed) void act(() => supabase.rpc('publish_tender', { tender_id: tender.id }));
+                }}
+              >
+                Publish
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void deleteDraft()}>Delete draft</Button>
+            </div>
+          )}
+
+          {phase === 'accepting-bids' && (
+            <form
+              className="mt-6 grid gap-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                let closesAt: string;
+                try {
+                  closesAt = jamaicaLocalToUtc(newClosesAt);
+                } catch (error) {
+                  return setProblem(errorMessage(error));
+                }
+                void act(() => supabase.rpc('extend_tender_closing_time', { tender_id: tender.id, new_closes_at: closesAt }));
               }}
             >
-              Publish
-            </button>
-            <button type="button" className="btn btn-outline" onClick={() => void deleteDraft()}>Delete draft</button>
-          </div>
-        )}
+              <Field label="Extend the closing time (Jamaica time). After publishing, this is the only change allowed." htmlFor="newClosesAt">
+                <Input id="newClosesAt" type="datetime-local" min={utcToJamaicaLocal(tender.closes_at)} value={newClosesAt} onChange={(event) => setNewClosesAt(event.target.value)} required />
+              </Field>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit">Extend</Button>
+              </div>
+            </form>
+          )}
 
-        {phase === 'accepting-bids' && (
-          <form
-            className="form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              let closesAt: string;
-              try {
-                closesAt = jamaicaLocalToUtc(newClosesAt);
-              } catch (error) {
-                return setProblem(errorMessage(error));
-              }
-              void act(() => supabase.rpc('extend_tender_closing_time', { tender_id: tender.id, new_closes_at: closesAt }));
-            }}
-          >
-            <label htmlFor="newClosesAt">Extend the closing time (Jamaica time). After publishing, this is the only change allowed.</label>
-            <input id="newClosesAt" type="datetime-local" min={utcToJamaicaLocal(tender.closes_at)} value={newClosesAt} onChange={(event) => setNewClosesAt(event.target.value)} required />
-            <button className="btn" type="submit">Extend</button>
-          </form>
-        )}
-
-        {(phase === 'accepting-bids' || phase === 'awaiting-opening' || phase === 'opened') && (
-          <form
-            className="form"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              const { isConfirmed } = await askToConfirm({
-                title: 'Cancel this tender?',
-                message: "Suppliers can no longer bid, and they see your reason. This can't be undone.",
-                confirmLabel: 'Cancel tender',
-                cancelLabel: 'Keep it open',
-                tone: 'danger',
-              });
-              if (isConfirmed) void act(() => supabase.rpc('cancel_tender', { tender_id: tender.id, reason: reason.trim() }));
-            }}
-          >
-            <label htmlFor="cancelReason">Reason for cancelling (shown to suppliers)</label>
-            <textarea id="cancelReason" rows={3} maxLength={maximumReasonLength} value={reason} onChange={(event) => setReason(event.target.value)} required />
-            <button className="btn btn-outline" type="submit" disabled={reason.trim() === ''}>Cancel tender</button>
-          </form>
-        )}
-      </div>
+          {(phase === 'accepting-bids' || phase === 'awaiting-opening' || phase === 'opened') && (
+            <form
+              className="mt-6 grid gap-4"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const { isConfirmed } = await askToConfirm({
+                  title: 'Cancel this tender?',
+                  message: "Suppliers can no longer bid, and they see your reason. This can't be undone.",
+                  confirmLabel: 'Cancel tender',
+                  cancelLabel: 'Keep it open',
+                  tone: 'danger',
+                });
+                if (isConfirmed) void act(() => supabase.rpc('cancel_tender', { tender_id: tender.id, reason: reason.trim() }));
+              }}
+            >
+              <Field label="Reason for cancelling (shown to suppliers)" htmlFor="cancelReason">
+                <Textarea id="cancelReason" rows={3} maxLength={maximumReasonLength} value={reason} onChange={(event) => setReason(event.target.value)} required />
+              </Field>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" variant="outline" disabled={reason.trim() === ''}>Cancel tender</Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
 
       {phase === 'accepting-bids' && <Notice>Bids are sealed until the closing time. Not even the number of bids is shown before then.</Notice>}
       {bidsReadable && (
         <>
-          <h3>Bids</h3>
+          <h3 className="mb-3 text-base font-semibold text-navy-dark">Bids</h3>
           {phase === 'awaiting-opening' && <Notice>The tender is closing; you can award a bid within a minute.</Notice>}
           <Bids tenderId={tender.id} canAward={phase === 'opened'} onChanged={refresh} />
         </>

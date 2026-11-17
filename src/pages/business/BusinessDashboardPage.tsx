@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { ErrorNotice, Loading } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
+import { Badge } from '../../components/ui/badge.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent } from '../../components/ui/card.tsx';
 import { Label, NativeSelect } from '../../components/ui/fields.tsx';
@@ -106,7 +107,7 @@ export function BusinessDashboardPage() {
                   <TableCell className="pl-4 font-medium">
                     <Link to={`/business/tenders/${tender.id}`} className="text-navy-dark">{tender.title}</Link>
                   </TableCell>
-                  <TableCell><span className={`badge ${tenderPhaseDisplay[tender.phase].badgeStyle}`}>{tenderPhaseDisplay[tender.phase].label}</span></TableCell>
+                  <TableCell><Badge variant={tenderPhaseDisplay[tender.phase].badgeStyle}>{tenderPhaseDisplay[tender.phase].label}</Badge></TableCell>
                   <TableCell className="pr-4 whitespace-nowrap tabular-nums">{formatJamaicaDateTime(tender.closes_at)}</TableCell>
                 </TableRow>
               ))}
