@@ -19,6 +19,11 @@ const signInErrorCodes = new Set(['PGRST301', 'PGRST302', 'PGRST303']);
 
 /** The HTTP status and message to send for a database error. */
 export function refusalReply(error: DatabaseError): { status: number; message: string } {
+  // Postgres's own "permission denied for function ..." shares 42501 with the app's refusals. Every
+  // function a signed-in user calls is granted to them, so this one means nobody is signed in.
+  if (error.code === '42501' && error.message.startsWith('permission denied for ')) {
+    return { status: 401, message: 'Log in, then try again.' };
+  }
   const refusalStatus = error.code === undefined ? undefined : statusForRefusalCode[error.code];
   if (refusalStatus !== undefined) {
     return { status: refusalStatus, message: error.message };

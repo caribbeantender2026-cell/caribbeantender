@@ -15,6 +15,13 @@ test('An expired or broken sign-in asks the person to log in again', () => {
   assert.match(reply.message, /Log in again/);
 });
 
+test("Postgres's own permission error (a visitor calling a members' function) never shows the function's name", () => {
+  // Same code as the app's deliberate refusals, but Postgres's wording.
+  const reply = refusalReply({ code: '42501', message: 'permission denied for function request_document_download' });
+  assert.equal(reply.status, 401);
+  assert.doesNotMatch(reply.message, /request_document_download|permission denied/);
+});
+
 test('Anything else gets a generic message, never the raw database text', () => {
   for (const error of [
     { code: '57014', message: 'canceling statement due to statement timeout' },
