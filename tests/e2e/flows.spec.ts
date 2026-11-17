@@ -1,9 +1,10 @@
 // The PRD section 11 end-to-end list, as one flow through the real app against the client's project.
 // Sign-up with email confirmation is not here: it needs a real inbox (OPEN_QUESTIONS.md, item 34).
 import { readFileSync } from 'node:fs';
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { utcToJamaicaLocal } from '../../src/lib/time.ts';
-import { createAccount, createAdmin, currentTotpCode, expireTrial, runIdentifier, testPassword, type TestAccount } from '../rls/target.ts';
+import { createAccount, createAdmin, currentTotpCode, expireTrial, runIdentifier, type TestAccount } from '../rls/target.ts';
+import { signIn, skipTour } from './session.ts';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -19,21 +20,6 @@ let expiredSupplier: TestAccount;
 let admin: TestAccount & { totpSecret: string };
 let tenderId = '';
 let closesAt = new Date();
-
-async function signIn(browser: Browser, account: TestAccount): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
-  await page.goto('/login');
-  await page.getByLabel('Email Address').fill(account.email);
-  await page.getByLabel('Password', { exact: true }).fill(testPassword);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).not.toHaveURL(/\/login/);
-  return page;
-}
-
-async function skipTour(page: Page) {
-  await page.getByRole('button', { name: 'Skip the tour' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-}
 
 test.beforeAll(async () => {
   business = await createAccount('e2e-business', 'business');

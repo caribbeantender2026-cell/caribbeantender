@@ -4,6 +4,7 @@
  * log; only then does the service role ban or unban the account in Supabase Auth, which ends sign-ins.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2.117.2';
+import { refusalReply } from '../_shared/database-refusal.ts';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Supabase Auth bans for a duration; 100 years stands for "until reactivated".
@@ -39,7 +40,9 @@ Deno.serve(async (request) => {
   });
   const changed = await asAdmin.rpc('admin_set_user_active', { user_id: userId, is_active: isActive });
   if (changed.error) {
-    return reply(403, { error: changed.error.message });
+    const refusal = refusalReply(changed.error);
+    if (refusal.status === 500) console.error('admin_set_user_active failed', changed.error);
+    return reply(refusal.status, { error: refusal.message });
   }
 
   const asService = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', { auth: { persistSession: false } });

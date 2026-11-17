@@ -1,6 +1,6 @@
 /** Log in, then go to the right dashboard (or where the person was heading). */
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -25,12 +25,23 @@ export function LoginPage() {
   const queryClient = useQueryClient();
   const [problem, setProblem] = useState<string | null>(null);
   const [needsChoice, setNeedsChoice] = useState(false);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
   const nextPath = safeNextPath(searchParameters.get('next'));
+  // A confirmation link that failed (expired, or used already) lands here with error_code in the hash.
+  const emailLinkFailed = new URLSearchParams(useLocation().hash.slice(1)).has('error_code');
 
   async function logIn(values: LoginValues) {
     setProblem(null);
+    setUnconfirmedEmail(null);
+    setResendState('idle');
     const { data, error } = await supabase.auth.signInWithPassword(values);
+    if (error?.code === 'email_not_confirmed') {
+      setUnconfirmedEmail(values.email);
+      setProblem('Confirm your email address first, using the link we emailed you when you registered.');
+      return;
+    }
     if (error) {
       setProblem(errorMessage(error));
       return;
@@ -60,6 +71,18 @@ export function LoginPage() {
     }
   }
 
+  async function resendConfirmation(email: string) {
+    setResendState('sending');
+    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${window.location.origin}/login` } });
+    if (error) {
+      setResendState('idle');
+      setProblem(errorMessage(error));
+      return;
+    }
+    setResendState('sent');
+    setProblem(null);
+  }
+
   if (needsChoice) {
     return (
       <Card className="w-[calc(100%-2rem)] max-w-md py-8">
@@ -84,6 +107,9 @@ export function LoginPage() {
       </CardHeader>
       <CardContent className="px-8">
         {searchParameters.get('reset') === 'success' && <Notice tone="success">Your password was updated. Log in with the new password.</Notice>}
+        {emailLinkFailed && (
+          <Notice tone="error">That email link has expired or was already used. If you have confirmed your email already, just log in. If not, log in below to get a new link.</Notice>
+        )}
         <form className="grid gap-4" onSubmit={form.handleSubmit(logIn)} noValidate>
           <Field label="Email Address" htmlFor="loginEmail" error={errors.email?.message}>
             <Input id="loginEmail" type="email" autoComplete="email" {...form.register('email')} />
@@ -93,6 +119,14 @@ export function LoginPage() {
           </Field>
           <div className="text-right text-sm"><Link to="/forgot-password">Forgot your password?</Link></div>
           {problem && <Notice tone="error">{problem}</Notice>}
+          {unconfirmedEmail && resendState === 'sent' && <Notice tone="success">A new confirmation link is on its way to {unconfirmedEmail}.</Notice>}
+          {unconfirmedEmail && resendState !== 'sent' && (
+            <div>
+              <Button type="button" variant="outline" disabled={resendState === 'sending'} onClick={() => void resendConfirmation(unconfirmedEmail)}>
+                {resendState === 'sending' ? 'Sending…' : 'Send a new confirmation link'}
+              </Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Log in'}</Button>
             <Button asChild variant="gold"><Link to="/register">Register</Link></Button>

@@ -267,8 +267,9 @@ function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountT
               className={menuItem}
               onClick={async () => {
                 closeMenu();
+                // Home first: signed out on a members' page, its guard would send the person to the login page instead.
+                await navigate('/');
                 await signOut();
-                void navigate('/');
               }}
             >
               <MenuRow icon={LogOutIcon} label="Log out" />

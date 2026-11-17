@@ -38,6 +38,14 @@ function MultiFactorGate({ onVerified }: { onVerified: () => void }) {
 
   async function enrol() {
     setProblem(null);
+    // A set-up left before its first code stays behind as an unverified factor. listFactors' totp list
+    // holds verified ones only, so this page can't see it, and it blocks a new one with the same name.
+    const listed = await supabase.auth.mfa.listFactors();
+    if (listed.error) return setProblem(errorMessage(listed.error));
+    for (const unfinished of listed.data.all.filter((factor) => factor.factor_type === 'totp' && factor.status === 'unverified')) {
+      const removed = await supabase.auth.mfa.unenroll({ factorId: unfinished.id });
+      if (removed.error) return setProblem(errorMessage(removed.error));
+    }
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: `Authenticator ${new Date().toISOString().slice(0, 10)}` });
     if (error) return setProblem(errorMessage(error));
     setEnrolment({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret });

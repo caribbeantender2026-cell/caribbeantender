@@ -8,7 +8,7 @@ import { Notice } from '../../components/Notices.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
 import { Field, Input, PasswordInput } from '../../components/ui/fields.tsx';
-import { errorMessage, supabase } from '../../lib/supabase.ts';
+import { cameFromResetLink, errorMessage, supabase } from '../../lib/supabase.ts';
 
 const minimumPasswordLength = 8;
 // Supabase reads the recovery token from the link asynchronously; give it a moment before giving up.
@@ -24,7 +24,7 @@ type ResetValues = z.infer<typeof resetSchema>;
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
-  const [linkState, setLinkState] = useState<'verifying' | 'ready' | 'invalid'>('verifying');
+  const [linkState, setLinkState] = useState<'verifying' | 'ready' | 'invalid'>(cameFromResetLink() ? 'ready' : 'verifying');
   const [problem, setProblem] = useState<string | null>(null);
   const form = useForm<ResetValues>({ resolver: zodResolver(resetSchema) });
   const { errors, isSubmitting } = form.formState;
@@ -33,9 +33,9 @@ export function ResetPasswordPage() {
     const { data: listener } = supabase.auth.onAuthStateChange((authEvent, session) => {
       if (authEvent === 'PASSWORD_RECOVERY' && session) setLinkState('ready');
     });
-    const timer = window.setTimeout(async () => {
-      const { data } = await supabase.auth.getSession();
-      setLinkState((current) => (current === 'ready' || data.session ? 'ready' : 'invalid'));
+    // A session alone is not enough: it may belong to whoever was already signed in on this computer.
+    const timer = window.setTimeout(() => {
+      setLinkState(cameFromResetLink() ? 'ready' : 'invalid');
     }, recoveryCheckDelayMilliseconds);
     return () => {
       listener.subscription.unsubscribe();
@@ -50,7 +50,8 @@ export function ResetPasswordPage() {
       setProblem(errorMessage(error));
       return;
     }
-    await supabase.auth.signOut();
+    // Every device, unlike Log out: a reset often follows a lost or stolen password.
+    await supabase.auth.signOut({ scope: 'global' });
     void navigate('/login?reset=success');
   }
 

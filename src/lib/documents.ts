@@ -63,11 +63,13 @@ export function sameStoredName(fileNames: string[]): string | null {
 }
 
 // Storage refuses an upload that breaks its rules with security-policy wording; these say which rules.
-const maximumUploadsPerDay = 20;
+// The policies' limits per person per day (20261005040900, and 20261117040000 for bid files).
+const maximumDraftUploadsPerDay = 20;
+const maximumBidUploadsPerDay = 50;
 /** When a business may upload a draft's files (the tender-documents storage policy). */
-export const draftUploadRule = `Files can only be added while the tender is a draft, and at most ${maximumUploadsPerDay} a day.`;
+export const draftUploadRule = `Files can only be added while the tender is a draft, and at most ${maximumDraftUploadsPerDay} a day.`;
 /** When a supplier may upload a bid's files (the bid-documents storage policy, the same rule as submit_bid). */
-export const bidUploadRule = `Files can only be added while the tender is open for bids and your trial or subscription is active, and at most ${maximumUploadsPerDay} a day.`;
+export const bidUploadRule = `Files can only be added while the tender is open for bids and your trial or subscription is active, and at most ${maximumBidUploadsPerDay} a day.`;
 
 /** Why a file wasn't uploaded, in plain English: a storage refusal becomes the rule it enforces. */
 export function uploadProblem(fileName: string, error: { message: string }, rule: string): string {

@@ -60,11 +60,14 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       setIsSessionLoading(false);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_authEvent, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((authEvent, nextSession) => {
       setSession(nextSession);
+      // However the session ended (Log out, another tab, an expired refresh), nothing cached for one
+      // person may be shown to whoever signs in next.
+      if (authEvent === 'SIGNED_OUT') queryClient.clear();
     });
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [queryClient]);
 
   const userId = session?.user.id ?? null;
   const accountsQuery = useQuery({
@@ -84,10 +87,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     refreshAccounts: async () => {
       await queryClient.invalidateQueries({ queryKey: ['accounts', userId] });
     },
+    // This device only (Tevin, 2026-11-17); the person stays signed in on their other devices.
     signOut: async () => {
-      await supabase.auth.signOut();
-      // Nothing cached for one person may be shown to whoever signs in next.
-      queryClient.clear();
+      await supabase.auth.signOut({ scope: 'local' });
     },
   };
 

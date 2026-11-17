@@ -4,6 +4,7 @@
  * role sign the link, because no user can read the stored files directly.
  */
 import { createClient } from 'npm:@supabase/supabase-js@2.117.2';
+import { refusalReply } from '../_shared/database-refusal.ts';
 
 const signedUrlLifetimeSeconds = 60;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,7 +41,9 @@ Deno.serve(async (request) => {
   const allowed = await asUser.rpc('request_document_download', { document_id: documentId });
   if (allowed.error) {
     // "Document not found." covers both missing and not yours, so ids can't be probed.
-    return reply(404, { error: allowed.error.message });
+    const refusal = refusalReply(allowed.error);
+    if (refusal.status === 500) console.error('request_document_download failed', allowed.error);
+    return reply(refusal.status, { error: refusal.message });
   }
   const location = allowed.data as { bucket: string; path: string; file_name: string };
 

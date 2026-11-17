@@ -168,19 +168,19 @@ export const storagePoliciesSuite: FixSuite = {
       },
     },
     {
-      name: 'M4: bid uploads need an active trial, tender uploads need your own draft, and each bucket allows 20 uploads per person per day',
+      // Bid files got their own, higher limit later (20261117040000, tested in 10-security-review.ts).
+      name: 'M4: bid uploads need an active trial, tender uploads need your own draft, and tender files allow 20 uploads per person per day',
       run: async (database) => {
         const businessId = await createUser(database, { accountType: 'business' });
         const otherBusinessId = await createUser(database, { accountType: 'business' });
-        const supplierId = await createUser(database, { accountType: 'supplier' });
         const tenderId = await createTender(database, businessId, 'accepting-bids');
         const draftId = await createTender(database, businessId, 'draft');
         assertRefused(await uploadAs(database, otherBusinessId, 'tender-documents', `${draftId}/planted.pdf`), "upload into someone else's draft");
         assertSucceeded(await uploadAs(database, businessId, 'tender-documents', `${draftId}/specification.pdf`), 'upload into own draft');
-        for (let uploadNumber = 0; uploadNumber < maximumDailyUploads; uploadNumber += 1) {
-          await createStoredFile(database, 'bid-documents', `${tenderId}/${randomUUID()}/file-${uploadNumber}.pdf`, supplierId);
+        for (let uploadNumber = 1; uploadNumber < maximumDailyUploads; uploadNumber += 1) {
+          await createStoredFile(database, 'tender-documents', `${draftId}/file-${uploadNumber}.pdf`, businessId);
         }
-        assertRefused(await uploadAs(database, supplierId, 'bid-documents', `${tenderId}/${randomUUID()}/one-too-many.pdf`), 'upload number 21');
+        assertRefused(await uploadAs(database, businessId, 'tender-documents', `${draftId}/one-too-many.pdf`), 'upload number 21');
         const expiredSupplierId = await createUser(database, { accountType: 'supplier' });
         await setSupplierAccess(database, expiredSupplierId, 'expired');
         assertRefused(await uploadAs(database, expiredSupplierId, 'bid-documents', `${tenderId}/${randomUUID()}/proposal/proposal.pdf`), 'upload without access');

@@ -42,6 +42,21 @@ export const supabase = createClient<Database>(
   configurationProblem ? 'not-configured' : publishableKey,
 );
 
+// Supabase reports PASSWORD_RECOVERY once, just after it reads a reset link on page load and often
+// before the reset page has mounted, so it is recorded from the start.
+let signedInFromResetLink = false;
+supabase.auth.onAuthStateChange((authEvent) => {
+  if (authEvent === 'PASSWORD_RECOVERY') signedInFromResetLink = true;
+});
+
+/**
+ * Whether a password-reset link signed this tab in. Only then may the reset page set a password: any
+ * other session could be someone else's on a shared computer, since a failed link keeps it signed in.
+ */
+export function cameFromResetLink(): boolean {
+  return signedInFromResetLink;
+}
+
 /** Turns any thrown value into a message a person can act on. */
 export function errorMessage(error: unknown): string {
   if (configurationProblem) {
