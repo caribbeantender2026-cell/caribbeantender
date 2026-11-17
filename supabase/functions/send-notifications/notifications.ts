@@ -49,8 +49,8 @@ export type BrandedEmailContent = {
   preview: string;
   heading: string;
   bodyHtml: string;
-  button?: { label: string; url: string };
-  footnoteHtml?: string;
+  button?: { label: string; url: string } | undefined;
+  footnoteHtml?: string | undefined;
 };
 
 /**
