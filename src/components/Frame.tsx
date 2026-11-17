@@ -69,7 +69,7 @@ function SkipLink() {
 }
 
 const marketingContainer = 'mx-auto w-full max-w-[1440px] px-4 sm:px-8';
-const headerButton = 'cursor-pointer rounded-[4px] border px-2.5 py-[11px] text-sm leading-5 font-medium whitespace-nowrap no-underline transition-colors duration-150 hover:no-underline sm:px-3 md:py-[7px]';
+const headerButton = 'cursor-pointer rounded-button px-3 py-[9px] text-sm leading-5 font-medium whitespace-nowrap no-underline transition-colors duration-150 hover:no-underline sm:px-4 md:py-[7px]';
 
 // Pages that open with the photograph behind the header.
 const photoTopPaths = new Set(['/', '/about']);
@@ -101,8 +101,10 @@ function MarketingFrame({ children }: { children: ReactNode }) {
   const hasFormPhoto = formPhotoPaths.has(pathname);
   const isOverPhoto = (photoTopPaths.has(pathname) || hasFormPhoto) && isAtTop;
   const linkTone = isOverPhoto ? 'text-white hover:text-white/75' : 'text-ink hover:text-ink/70';
-  const outlineButton = classNames(headerButton, isOverPhoto ? 'border-white text-white hover:bg-white/10' : 'border-ink text-ink hover:bg-ink/5');
-  const solidButton = classNames(headerButton, isOverPhoto ? 'border-white bg-white text-ink hover:bg-white/90' : 'border-ink bg-ink text-white hover:bg-ink/85');
+  // The two account buttons sit joined in one see-through group, like the home page demo's tabs.
+  const buttonGroup = isOverPhoto ? 'border-white/25 bg-white/10 backdrop-blur-md' : 'border-ink/35 bg-white/40';
+  const outlineButton = classNames(headerButton, isOverPhoto ? 'text-white hover:bg-white/10' : 'text-ink hover:bg-ink/10');
+  const solidButton = classNames(headerButton, isOverPhoto ? 'bg-white text-ink hover:bg-white/90' : 'bg-ink text-white hover:bg-ink/85');
 
   return (
     <div className="relative flex min-h-dvh flex-col bg-paper text-ink">
@@ -113,7 +115,7 @@ function MarketingFrame({ children }: { children: ReactNode }) {
           <Notice tone="error">{configurationProblem}</Notice>
         </div>
       )}
-      <header className={classNames('sticky top-0 z-30 transition-colors duration-200', !isOverPhoto && 'bg-paper/90 backdrop-blur-md')}>
+      <header className={classNames('sticky top-0 z-30 transition-colors duration-200', !isOverPhoto && 'bg-paper/60 shadow-[0_1px_0_rgb(0_32_79/0.08)] backdrop-blur-xl backdrop-saturate-150')}>
         <div className={classNames(marketingContainer, 'flex h-16 items-center gap-4 sm:h-[72px] sm:gap-10')}>
           <h1 className="contents">
             <Wordmark tone={isOverPhoto ? 'white' : 'ink'} />
@@ -124,7 +126,7 @@ function MarketingFrame({ children }: { children: ReactNode }) {
               <li><NavLink to="/about" end className={classNames(linkTone, 'no-underline hover:no-underline')}>About us</NavLink></li>
             </ul>
           </nav>
-          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className={classNames('ml-auto flex shrink-0 items-center gap-1 rounded-button border p-1 transition-colors duration-200', buttonGroup)}>
             {session ? (
               <>
                 <button

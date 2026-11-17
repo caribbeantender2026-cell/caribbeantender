@@ -18,6 +18,14 @@ export const tenderPhaseDisplay: Record<TenderPhase, { label: string; badgeStyle
   cancelled: { label: 'Cancelled', badgeStyle: 'cancelled' },
 };
 
+/** A short label for each bid status; the status itself is the badge style. */
+export const bidStatusLabels: Record<Enums<'bid_status'>, string> = {
+  submitted: 'Submitted',
+  awarded: 'Awarded',
+  unsuccessful: 'Unsuccessful',
+  tender_cancelled: 'Tender cancelled',
+};
+
 /**
  * Works out a tender's phase at a given moment. Bids are accepted while the tender is open and
  * before closes_at; they are readable by the business only once the tender has been closed.

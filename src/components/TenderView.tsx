@@ -1,7 +1,9 @@
-/** A tender's two cards, shared by the tender page and the home page's live example so the two never drift apart. */
+/** A tender's two cards and a bid's receipt, shared by the real pages and the home page's live example so they never drift apart. */
 import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { Building2Icon, CalendarClockIcon, LockKeyholeIcon, TagIcon } from 'lucide-react';
 import type { Tables } from '../lib/database.types.ts';
+import { formatAmount } from '../lib/queries.ts';
 import { tenderPhase, tenderPhaseDisplay } from '../lib/rules.ts';
 import { formatJamaicaDateTime, formatTimeLeft } from '../lib/time.ts';
 import { DocumentList, type RecordedDocument } from './DocumentList.tsx';
@@ -22,6 +24,16 @@ export function useNow(isTicking = true): Date {
   return now;
 }
 
+/** The receipt for a submitted bid: what was bid and the exact time the database recorded. */
+export function BidReceipt({ amount, currency, submittedAt }: { amount: number; currency: string; submittedAt: string }) {
+  return (
+    <Notice tone="success">
+      Bid received: {formatAmount(amount, currency)}, submitted at {formatJamaicaDateTime(submittedAt, { withSeconds: true })} Jamaica time.
+      Bids can't be changed after submission. <Link to="/supplier">See all my bids</Link>.
+    </Notice>
+  );
+}
+
 type TenderViewProps = {
   tender: Pick<Tables<'tenders'>, 'title' | 'description' | 'status' | 'closes_at' | 'cancelled_reason'>;
   now: Date;
@@ -32,10 +44,12 @@ type TenderViewProps = {
   requirementsForm?: ReactNode;
   /** The buttons in the side card, such as "Submit a bid". */
   actions?: ReactNode;
+  /** Puts the side card (closing time and actions) above the details on screens narrower than the two-column layout. */
+  sideCardFirstOnSmallScreens?: boolean;
 };
 
 /** Details and documents in the main card; the closing time, with a countdown while bids are open, in the side card. */
-export function TenderView({ tender, now, businessName, categoryName, documents, requirementsForm, actions }: TenderViewProps) {
+export function TenderView({ tender, now, businessName, categoryName, documents, requirementsForm, actions, sideCardFirstOnSmallScreens = false }: TenderViewProps) {
   const phase = tenderPhase(tender, now);
   const timeLeft = formatTimeLeft(tender.closes_at, now);
   const showsCountdown = phase === 'accepting-bids' && timeLeft !== null;
@@ -62,7 +76,7 @@ export function TenderView({ tender, now, businessName, categoryName, documents,
           {requirementsForm}
         </CardContent>
       </Card>
-      <Card className="lg:sticky lg:top-6">
+      <Card className={sideCardFirstOnSmallScreens ? 'max-lg:-order-1 lg:sticky lg:top-6' : 'lg:sticky lg:top-6'}>
         <CardHeader>
           <CardDescription>{showsCountdown ? 'Closes in' : 'Closing time'}</CardDescription>
           <p className="text-2xl font-semibold tracking-tight text-navy-dark tabular-nums" aria-live="off">

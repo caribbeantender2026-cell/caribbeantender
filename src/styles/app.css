@@ -60,17 +60,41 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* Every button, link-button and the demo's tabs: as round for their height as the status badges are for theirs. */
+  --radius-button: calc(var(--radius) + 4px);
   /* Depth from layered shadows rather than a grey border (a transparent border keeps an edge in forced-colours mode). */
   --shadow-surface: 0 0 0 1px rgb(15 23 42 / 0.07), 0 1px 2px rgb(15 23 42 / 0.05), 0 4px 12px -4px rgb(15 23 42 / 0.08);
 }
 
-/* The home page's example tender: a soft gold ring pulses out from "Submit a bid". Used with motion-safe: only. */
+/*
+ * The home page demo (src/components/TenderDemo.tsx): screens fade in; the pointer tilts as it sets off
+ * and settles; a click tips the pointer in depth (tip down, tail up) while three short strokes burst from
+ * the tip. Only used where motion is allowed.
+ */
 @theme {
-  --animate-bid-glow: bid-glow 2.4s ease-out infinite;
+  --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-pointer-tilt: pointer-tilt 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pointer-click: pointer-click 0.35s ease-out both;
+  --animate-click-burst: click-burst 0.4s ease-out both;
 
-  @keyframes bid-glow {
-    0% { box-shadow: 0 0 0 0 rgb(217 158 4 / 0.55); }
-    70%, 100% { box-shadow: 0 0 0 10px rgb(217 158 4 / 0); }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes pointer-tilt {
+    0%, 100% { rotate: 0deg; }
+    35% { rotate: var(--pointer-tilt); }
+  }
+
+  @keyframes pointer-click {
+    0%, 100% { transform: none; }
+    40% { transform: perspective(120px) rotateX(18deg) rotateY(-18deg) scale(0.9); }
+  }
+
+  @keyframes click-burst {
+    from { opacity: 1; transform: translateX(3px) scaleX(1); }
+    to { opacity: 0; transform: translateX(10px) scaleX(1.2); }
   }
 }
 
@@ -168,6 +192,18 @@
     @apply bg-cover bg-center;
   }
 
+  /* The home hero's photograph fades into the paper below instead of ending in a hard line. It is a
+     background layer, so it sits behind the demo and never covers it. */
+  .hills-backdrop.fades-to-paper {
+    background-image:
+      linear-gradient(to bottom, transparent calc(100% - 5rem), var(--paper) calc(100% - 0.5rem)),
+      linear-gradient(to bottom, rgb(0 23 58 / 0.78), rgb(0 23 58 / 0.4) 42%, rgb(0 23 58 / 0.6)),
+      url("../assets/photos/jamaica-hills.webp");
+    /* Sized to the box, the fade left one row of photo showing at the bottom edge in Chrome; 2px taller covers it. */
+    background-size: 100% calc(100% + 2px), cover, cover;
+    background-position: top, center, center;
+  }
+
   /* About Us body: the client's Markdown in a reading column, serif headings, the four principles as tiles. */
   .about-body {
     @apply text-lg leading-[1.7] text-ink/85;
@@ -216,7 +252,7 @@
   }
 
   .btn {
-    @apply inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium whitespace-nowrap text-primary-foreground no-underline shadow-xs transition-[color,background-color,border-color,box-shadow,scale] duration-150 ease-out outline-none hover:bg-primary/90 hover:no-underline active:scale-[0.96] focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-wait disabled:opacity-50;
+    @apply inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-button bg-primary px-4 text-sm font-medium whitespace-nowrap text-primary-foreground no-underline shadow-xs transition-[color,background-color,border-color,box-shadow,scale] duration-150 ease-out outline-none hover:bg-primary/90 hover:no-underline active:scale-[0.96] focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-wait disabled:opacity-50;
   }
 
   .btn.gold {

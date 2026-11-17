@@ -79,5 +79,6 @@ export function formatTimeLeft(until: string, now: Date = new Date()): string | 
   // The two largest units that matter; seconds only in the last hour, when they do.
   if (days > 0) return `${unit(days, 'day')} ${unit(hours, 'hour')}`;
   if (hours > 0) return `${unit(hours, 'hour')} ${unit(minutes, 'minute')}`;
-  return `${unit(minutes, 'minute')} ${unit(seconds, 'second')}`;
+  if (minutes > 0) return `${unit(minutes, 'minute')} ${unit(seconds, 'second')}`;
+  return unit(seconds, 'second');
 }

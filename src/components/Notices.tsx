@@ -10,7 +10,10 @@ export function Notice({ tone, children }: { tone?: 'error' | 'success'; childre
   return (
     <Alert variant={tone === 'error' ? 'destructive' : (tone ?? 'default')} role={tone === 'error' ? 'alert' : 'status'} className="my-4">
       <Icon aria-hidden="true" />
-      <AlertDescription>{children}</AlertDescription>
+      {/* One wrapper, so text and links flow as a sentence instead of each becoming a row of the description's grid. */}
+      <AlertDescription>
+        <div className="leading-relaxed">{children}</div>
+      </AlertDescription>
     </Alert>
   );
 }

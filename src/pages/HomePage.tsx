@@ -2,13 +2,10 @@
  * The public homepage: what the platform does, and buttons to sign up or sign in (PRD P1-12). Static:
  * visitors read no data. Layout, type and spacing follow harvey.ai, in CaribbeanTender's navy and gold.
  */
-import { useState } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon, CheckIcon } from 'lucide-react';
 import { useAccount } from '../auth/AccountContext.tsx';
-import type { RecordedDocument } from '../components/DocumentList.tsx';
-import { TenderView, useNow } from '../components/TenderView.tsx';
-import { Button } from '../components/ui/button.tsx';
+import { TenderDemo } from '../components/TenderDemo.tsx';
 import { classNames } from '../lib/classNames.ts';
 import cleaningPhoto from '../assets/photos/cleaning-office.webp';
 import goodsPhoto from '../assets/photos/goods-warehouse.webp';
@@ -19,9 +16,6 @@ import technologyPhoto from '../assets/photos/technology-laptop.webp';
 import worksPhoto from '../assets/photos/works-site.webp';
 
 const container = 'mx-auto w-full max-w-[1440px] px-4 sm:px-8';
-// The hero buttons sit on the photograph: white, and a white outline.
-const primaryButton = 'inline-flex items-center rounded-[4px] border border-white bg-white px-5 py-3 text-base font-medium text-ink no-underline transition-colors duration-150 hover:bg-white/90 hover:no-underline';
-const secondaryButton = 'inline-flex items-center rounded-[4px] border border-white px-5 py-3 text-base font-medium text-white no-underline transition-colors duration-150 hover:bg-white/10 hover:no-underline';
 const sectionHeading = 'font-serif text-4xl leading-[1.1] font-normal tracking-[-0.01em] text-ink sm:text-5xl';
 
 const audiences = [
@@ -55,51 +49,6 @@ const facts = [
   { label: 'Bid receipts are timestamped to', value: 'the second' },
 ];
 
-// Under an hour, so the example's countdown shows minutes and seconds ticking.
-const exampleTimeLeftMilliseconds = (47 * 60 + 30) * 1000;
-const exampleTender = {
-  title: 'Supply of 40 ergonomic office chairs',
-  description:
-    'Harbourview Hotels is refitting its head office in New Kingston and needs 40 ergonomic office chairs.\n\nEach chair must have adjustable height, lumbar support and armrests, and come with at least a 3-year warranty. Delivery to 12 Knutsford Boulevard within 30 days of award. Please quote a unit price and a total, including delivery and GCT.',
-  status: 'open',
-  cancelled_reason: null,
-} as const;
-const exampleDocuments: RecordedDocument[] = [
-  { id: 'example-specification', file_name: 'Chair specification.pdf', document_role: 'supporting', size_bytes: 482_000 },
-  { id: 'example-floor-plan', file_name: 'Office floor plan.pdf', document_role: 'supporting', size_bytes: 1_240_000 },
-];
-
-/**
- * The real tender page's cards with sample data and a live countdown, so visitors see the product rather
- * than a picture of it. Inert: nothing in it can be clicked or focused, and screen readers get one label.
- */
-function ExampleTender() {
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const now = useNow(!prefersReducedMotion);
-  const [closesAt] = useState(() => new Date(Date.now() + exampleTimeLeftMilliseconds).toISOString());
-  return (
-    <div
-      role="img"
-      aria-label="An example tender on CaribbeanTender, with its description, documents, the time left to bid counting down and the button to submit a sealed bid."
-      className="relative mx-auto mt-14 h-[460px] w-full max-w-[1144px] overflow-hidden rounded-t-lg bg-background px-4 pt-5 text-left text-foreground shadow-[0_30px_80px_-20px_rgb(0_0_0/0.6)] select-none sm:h-[540px] sm:px-8 sm:pt-7 lg:mt-[72px] lg:h-[600px] lg:w-[88%]"
-    >
-      <p className="mb-4 text-sm font-medium text-muted-foreground">Example tender</p>
-      <div inert>
-        <TenderView
-          tender={{ ...exampleTender, closes_at: closesAt }}
-          now={now}
-          businessName="Harbourview Hotels Ltd"
-          categoryName="Furniture & Fixtures"
-          documents={exampleDocuments}
-          actions={<Button variant="gold" className="w-full motion-safe:animate-bid-glow">Submit a bid</Button>}
-        />
-      </div>
-      {/* The example fades into the paper of the section below, so its cut-off bottom edge doesn't show. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-linear-to-b from-paper/0 to-paper" />
-    </div>
-  );
-}
-
 export function HomePage() {
   const { session } = useAccount();
   const signUpPath = session ? '/tenders' : '/register';
@@ -107,7 +56,7 @@ export function HomePage() {
 
   return (
     <>
-      <section className="hills-backdrop -mt-16 overflow-hidden text-white sm:-mt-[72px]">
+      <section className="hills-backdrop fades-to-paper -mt-16 overflow-hidden text-white sm:-mt-[72px]">
         <div className={classNames(container, 'pt-28 sm:pt-[136px]')}>
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
             <h2 className="font-serif text-[52px] leading-[1.05] font-normal tracking-[-0.0125em] text-white sm:text-6xl lg:text-[72px]">eTendering System</h2>
@@ -115,13 +64,9 @@ export function HomePage() {
               <p className="max-w-[36rem] text-lg leading-[1.35] text-white/85 sm:text-xl">
                 CaribbeanTender is a procurement platform where businesses publish tenders and suppliers submit sealed bids electronically.
               </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link to={signUpPath} className={primaryButton}>{signUpLabel}</Link>
-                {!session && <Link to="/login" className={secondaryButton}>Sign in</Link>}
-              </div>
             </div>
           </div>
-          <ExampleTender />
+          <TenderDemo />
         </div>
       </section>
 
@@ -145,7 +90,7 @@ export function HomePage() {
                     </li>
                   ))}
                 </ul>
-                <Link to={signUpPath} className="mt-8 inline-flex rounded-[4px] border border-white px-4 py-2.5 text-sm font-medium text-white no-underline transition-colors duration-150 hover:bg-white/10 hover:no-underline">
+                <Link to={signUpPath} className="mt-8 inline-flex rounded-button border border-white px-4 py-2.5 text-sm font-medium text-white no-underline transition-colors duration-150 hover:bg-white/10 hover:no-underline">
                   {signUpLabel}
                 </Link>
               </div>
@@ -202,7 +147,7 @@ export function HomePage() {
           </dl>
           <div className="flex flex-col gap-6 border-b border-white/15 py-20 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-serif text-3xl leading-[1.15] font-normal sm:text-[32px]">Ready for Your Next Tender?</h2>
-            <Link to={signUpPath} className="inline-flex self-start rounded-[4px] bg-white px-5 py-3 text-base font-medium text-ink no-underline transition-colors duration-150 hover:bg-white/90 hover:no-underline">
+            <Link to={signUpPath} className="inline-flex self-start rounded-button bg-white px-5 py-3 text-base font-medium text-ink no-underline transition-colors duration-150 hover:bg-white/90 hover:no-underline">
               {signUpLabel}
             </Link>
           </div>

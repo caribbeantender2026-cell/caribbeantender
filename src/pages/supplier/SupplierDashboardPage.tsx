@@ -12,16 +12,9 @@ import type { FormData } from '../../lib/forms.ts';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import type { Enums } from '../../lib/database.types.ts';
 import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
-import { subscriptionPrices, supplierHasAccess } from '../../lib/rules.ts';
+import { bidStatusLabels, subscriptionPrices, supplierHasAccess } from '../../lib/rules.ts';
 import { supabase, supportEmail } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime } from '../../lib/time.ts';
-
-const bidStatusLabels: Record<Enums<'bid_status'>, string> = {
-  submitted: 'Submitted',
-  awarded: 'Awarded',
-  unsuccessful: 'Unsuccessful',
-  tender_cancelled: 'Tender cancelled',
-};
 
 /** The supplier's own bids with their tenders' titles and their recorded documents. */
 function useOwnBids(supplierId: string) {

@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { FormFields, useFormDefinition } from '../../components/FormFields.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
+import { BidReceipt } from '../../components/TenderView.tsx';
 import type { Json } from '../../lib/database.types.ts';
 import { formProblems, type FormData } from '../../lib/forms.ts';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, bidDocumentPath, checkDocument } from '../../lib/documents.ts';
@@ -21,16 +22,6 @@ import { useTender } from '../TenderDetailsPage.tsx';
 // Matches submit_bid: above zero, below 10^12 (numeric(14,2)), at most two decimal places.
 const maximumAmount = 1_000_000_000_000;
 const amountPattern = /^\d+(\.\d{1,2})?$/;
-
-/** The receipt for a submitted bid: what was bid and the exact time the database recorded. */
-function Receipt({ amount, currency, submittedAt }: { amount: number; currency: string; submittedAt: string }) {
-  return (
-    <Notice tone="success">
-      Bid received: {formatAmount(amount, currency)}, submitted at {formatJamaicaDateTime(submittedAt, { withSeconds: true })} Jamaica time.
-      Bids can't be changed after submission. <Link to="/supplier">See all my bids</Link>.
-    </Notice>
-  );
-}
 
 export function SubmitBidPage() {
   const tenderId = useParams().tenderId ?? '';
@@ -143,7 +134,7 @@ export function SubmitBidPage() {
     </>
   );
   if (existingBid) {
-    return <>{header}<Receipt amount={existingBid.amount} currency={existingBid.currency} submittedAt={existingBid.submitted_at} /></>;
+    return <>{header}<BidReceipt amount={existingBid.amount} currency={existingBid.currency} submittedAt={existingBid.submitted_at} /></>;
   }
   if (!supplierHasAccess(subscriptionQuery.data ?? null)) {
     return (

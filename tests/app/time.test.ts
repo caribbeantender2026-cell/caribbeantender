@@ -33,6 +33,8 @@ test('The countdown shows the two largest units, and nothing once the time has p
   assert.equal(formatTimeLeft('2026-11-21T13:00:00Z', now), '1 day 1 hour');
   assert.equal(formatTimeLeft('2026-11-20T13:01:00Z', now), '1 hour 1 minute');
   assert.equal(formatTimeLeft('2026-11-20T12:04:10Z', now), '4 minutes 10 seconds');
+  assert.equal(formatTimeLeft('2026-11-20T12:00:45Z', now), '45 seconds', 'no "0 minutes" in the last minute');
+  assert.equal(formatTimeLeft('2026-11-20T12:00:01Z', now), '1 second');
   assert.equal(formatTimeLeft('2026-11-20T12:00:00Z', now), null, 'the closing moment itself');
   assert.equal(formatTimeLeft('2026-11-19T12:00:00Z', now), null);
 });
