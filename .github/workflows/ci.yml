@@ -27,6 +27,46 @@ jobs:
       - run: pnpm test:database:before-after
       - run: pnpm exec vite build
 
+  # Publishes the site to Cloudflare Pages after every push to main whose checks all pass, so a
+  # broken build or a failing test never reaches caribbeantender.com. One deploy at a time.
+  # Needs, under Settings > Secrets and variables > Actions:
+  #   secrets:   CLOUDFLARE_API_TOKEN (Cloudflare Pages: Edit), CLOUDFLARE_ACCOUNT_ID
+  #   variables: VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY (public by design, shipped to every
+  #              browser), and optionally VITE_SUPPORT_EMAIL and VITE_SENTRY_DSN
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    env:
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPPORT_EMAIL: ${{ vars.VITE_SUPPORT_EMAIL }}
+      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Stop if the site's public settings are missing
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "Set the repository variables VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY under Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          fi
+      - run: pnpm exec vite build
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=caribbeantender --branch=main --commit-dirty=true
+
   # The RLS suite runs against the client's project (OPEN_QUESTIONS.md, decision D1), so only when
   # started by hand from the Actions tab. It snapshots the row counts first and checks them after.
   live-rls:

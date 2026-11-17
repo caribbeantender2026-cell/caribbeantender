@@ -5,6 +5,7 @@ import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } fr
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AccountProvider } from './auth/AccountContext.tsx';
 import { AccountLayout, PublicLayout, RequireSignIn } from './components/Frame.tsx';
+import { CrashPage } from './pages/CrashPage.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { NotFoundPage } from './pages/NotFoundPage.tsx';
 // Self-hosted fonts (the CSP allows fonts only from this site): a serif for headlines, a sans for text.
@@ -35,6 +36,7 @@ const page = (load: () => Promise<ComponentType>) => ({ lazy: async () => ({ Com
 const router = createBrowserRouter([
   {
     element: <PublicLayout />,
+    errorElement: <CrashPage />,
     children: [
       { path: '/', element: <HomePage /> },
       { path: '/about', ...page(async () => (await import('./pages/InformationPage.tsx')).AboutPage) },
@@ -60,6 +62,7 @@ const router = createBrowserRouter([
   },
   {
     element: <AccountLayout accountType="business" />,
+    errorElement: <CrashPage />,
     children: [
       { path: '/business', ...page(async () => (await import('./pages/business/BusinessDashboardPage.tsx')).BusinessDashboardPage) },
       { path: '/business/profile', ...page(async () => (await import('./pages/account/CompanyProfilePage.tsx')).BusinessProfilePage) },
@@ -70,6 +73,7 @@ const router = createBrowserRouter([
   },
   {
     element: <AccountLayout accountType="supplier" />,
+    errorElement: <CrashPage />,
     children: [
       { path: '/supplier', ...page(async () => (await import('./pages/supplier/SupplierDashboardPage.tsx')).SupplierDashboardPage) },
       { path: '/supplier/profile', ...page(async () => (await import('./pages/account/CompanyProfilePage.tsx')).SupplierProfilePage) },
