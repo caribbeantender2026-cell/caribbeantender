@@ -10,7 +10,7 @@ test('A business adds a picture, sees it in the header, and removes it', async (
   const business = await createAccount('e2e-picture', 'business');
   await page.goto('/login');
   await page.getByLabel('Email Address').fill(business.email);
-  await page.getByLabel('Password').fill(testPassword);
+  await page.getByLabel('Password', { exact: true }).fill(testPassword);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).not.toHaveURL(/\/login/);
   await page.getByRole('button', { name: 'Skip the tour' }).click();

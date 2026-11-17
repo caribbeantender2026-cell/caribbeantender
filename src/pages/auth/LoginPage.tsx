@@ -8,7 +8,7 @@ import { createAccount, loadAccounts, useAccount, type AccountType } from '../..
 import { Notice } from '../../components/Notices.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader } from '../../components/ui/card.tsx';
-import { Field, Input } from '../../components/ui/fields.tsx';
+import { Field, Input, PasswordInput } from '../../components/ui/fields.tsx';
 import { safeNextPath } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
@@ -88,7 +88,7 @@ export function LoginPage() {
             <Input id="loginEmail" type="email" autoComplete="email" {...form.register('email')} />
           </Field>
           <Field label="Password" htmlFor="loginPassword" error={errors.password?.message}>
-            <Input id="loginPassword" type="password" autoComplete="current-password" {...form.register('password')} />
+            <PasswordInput id="loginPassword" autoComplete="current-password" {...form.register('password')} />
           </Field>
           <div className="text-right text-sm"><Link to="/forgot-password">Forgot your password?</Link></div>
           {problem && <Notice tone="error">{problem}</Notice>}

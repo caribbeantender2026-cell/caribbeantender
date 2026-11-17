@@ -8,7 +8,7 @@ import { useAccount } from '../../auth/AccountContext.tsx';
 import { Notice } from '../../components/Notices.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
-import { Choice, Field, Input, NativeSelect } from '../../components/ui/fields.tsx';
+import { Choice, Field, Input, NativeSelect, PasswordInput } from '../../components/ui/fields.tsx';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
 const minimumPasswordLength = 8;
@@ -104,10 +104,10 @@ export function RegisterPage() {
           </Field>
 
           <Field label="Password" htmlFor="registerPassword" error={errors.password?.message}>
-            <Input id="registerPassword" type="password" autoComplete="new-password" {...form.register('password')} />
+            <PasswordInput id="registerPassword" autoComplete="new-password" {...form.register('password')} />
           </Field>
           <Field label="Confirm Password" htmlFor="confirmPassword">
-            <Input id="confirmPassword" type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
+            <PasswordInput id="confirmPassword" autoComplete="new-password" {...form.register('confirmPassword')} />
             <MatchHint first={watched.password ?? ''} second={watched.confirmPassword ?? ''} what="Passwords" />
           </Field>
 

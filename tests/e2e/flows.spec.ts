@@ -24,7 +24,7 @@ async function signIn(browser: Browser, account: TestAccount): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
   await page.goto('/login');
   await page.getByLabel('Email Address').fill(account.email);
-  await page.getByLabel('Password').fill(testPassword);
+  await page.getByLabel('Password', { exact: true }).fill(testPassword);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).not.toHaveURL(/\/login/);
   return page;

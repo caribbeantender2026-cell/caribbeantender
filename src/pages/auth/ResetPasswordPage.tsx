@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { Notice } from '../../components/Notices.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
-import { Field, Input } from '../../components/ui/fields.tsx';
+import { Field, Input, PasswordInput } from '../../components/ui/fields.tsx';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
 const minimumPasswordLength = 8;
@@ -70,10 +70,10 @@ export function ResetPasswordPage() {
         {linkState === 'ready' && (
           <form className="grid gap-4" onSubmit={form.handleSubmit(updatePassword)} noValidate>
             <Field label="New Password" htmlFor="newPassword" error={errors.password?.message}>
-              <Input id="newPassword" type="password" autoComplete="new-password" {...form.register('password')} />
+              <PasswordInput id="newPassword" autoComplete="new-password" {...form.register('password')} />
             </Field>
             <Field label="Confirm New Password" htmlFor="confirmNewPassword" error={errors.confirmPassword?.message}>
-              <Input id="confirmNewPassword" type="password" autoComplete="new-password" {...form.register('confirmPassword')} />
+              <PasswordInput id="confirmNewPassword" autoComplete="new-password" {...form.register('confirmPassword')} />
             </Field>
             <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">Use at least {minimumPasswordLength} characters. A longer passphrase is recommended.</div>
             {problem && <Notice tone="error">{problem}</Notice>}

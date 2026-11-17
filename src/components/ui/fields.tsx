@@ -2,8 +2,8 @@
  * shadcn/ui form fields: label, input, textarea and a native select styled like shadcn's (kept native for
  * phones and tests), plus Field, which puts a label, its control and its error message together.
  */
-import { ChevronDownIcon } from 'lucide-react';
-import type { ComponentProps, ReactNode } from 'react';
+import { ChevronDownIcon, EyeIcon as EyeOpenIcon, EyeOffIcon } from 'lucide-react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { classNames } from '../../lib/classNames.ts';
 
 const fieldClasses =
@@ -25,6 +25,29 @@ function Input({ className, ...properties }: ComponentProps<'input'>) {
       )}
       {...properties}
     />
+  );
+}
+
+/**
+ * A password input with an eye button that shows or hides what was typed, so people can check a long
+ * password before submitting it. Edge's own reveal button is hidden so there is only one.
+ */
+function PasswordInput({ className, ...properties }: Omit<ComponentProps<'input'>, 'type'>) {
+  const [isVisible, setIsVisible] = useState(false);
+  const EyeIcon = isVisible ? EyeOffIcon : EyeOpenIcon;
+  return (
+    <div className="relative">
+      <Input type={isVisible ? 'text' : 'password'} className={classNames('pr-11 [&::-ms-clear]:hidden [&::-ms-reveal]:hidden', className)} {...properties} />
+      <button
+        type="button"
+        aria-label="Show password"
+        aria-pressed={isVisible}
+        onClick={() => setIsVisible(!isVisible)}
+        className="absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center rounded-r-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <EyeIcon className="size-4" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -64,4 +87,4 @@ function Choice({ className, children, ...properties }: ComponentProps<'input'> 
   );
 }
 
-export { Choice, Field, Input, Label, NativeSelect, Textarea };
+export { Choice, Field, Input, Label, NativeSelect, PasswordInput, Textarea };
