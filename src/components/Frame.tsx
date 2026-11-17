@@ -5,7 +5,7 @@
  */
 import { lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
-import { ArrowLeftRightIcon, Building2Icon, ChevronDownIcon, CompassIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PlusIcon, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRightIcon, Building2Icon, ChevronDownIcon, CompassIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PlusIcon, UserRoundIcon, type LucideIcon } from 'lucide-react';
 import { createAccount, useAccount, type AccountType } from '../auth/AccountContext.tsx';
 import { classNames } from '../lib/classNames.ts';
 import { configurationProblem, errorMessage, supportEmail } from '../lib/supabase.ts';
@@ -56,12 +56,6 @@ const formPhotoPaths = new Set(['/login', '/register', '/forgot-password', '/res
 const fullWidthPaths = new Set(['/', '/about', '/privacy', '/terms', ...formPhotoPaths]);
 
 const rememberedAccountTypeKey = 'caribbeantender.account-type';
-
-/** Up to two initials from a company name, for the account avatar. */
-function initials(name: string): string {
-  const words = name.split(/\s+/).filter((word) => /^[A-Za-z0-9]/.test(word));
-  return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join('') || 'CT';
-}
 
 /** The account type the person last worked in, if the browser kept it. */
 function rememberedAccountType(): AccountType | null {
@@ -190,8 +184,8 @@ function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountT
           isOverPhoto ? 'border-white/25 bg-white/10 text-white backdrop-blur-md hover:bg-white/15' : 'border-ink/35 bg-white/40 text-ink hover:bg-white/70',
         )}
       >
-        <span className={classNames('grid size-8 place-items-center rounded-[10px] text-xs font-semibold', isOverPhoto ? 'bg-white text-ink' : 'bg-ink text-white')} aria-hidden="true">
-          {initials(companyName)}
+        <span className={classNames('grid size-8 place-items-center rounded-[10px]', isOverPhoto ? 'bg-white text-ink' : 'bg-ink text-white')} aria-hidden="true">
+          <UserRoundIcon className="size-[18px]" />
         </span>
         <span className="hidden max-w-44 truncate lg:block">{companyName}</span>
         <ChevronDownIcon className="hidden size-4 md:block" aria-hidden="true" />
@@ -206,7 +200,9 @@ function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountT
       >
         <div className="grid gap-0.5">
           <div className="flex items-center gap-3 px-3 py-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-ink text-xs font-semibold text-white" aria-hidden="true">{initials(companyName)}</span>
+            <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-ink text-white" aria-hidden="true">
+              <UserRoundIcon className="size-5" />
+            </span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{companyName}</span>
               <span className="block text-xs text-ink/60">{accountType ? `${accountLabel[accountType]} account` : session?.user.email}</span>
