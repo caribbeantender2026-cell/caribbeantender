@@ -81,7 +81,7 @@ export function FormsPage() {
                     </Button>
                     {form.download_path && (
                       <Button size="sm" variant="outline" type="button" onClick={() => void downloadPrintable(form.download_path ?? '')}>
-                        Download to print
+                        Download (Word)
                       </Button>
                     )}
                   </div>
