@@ -1,5 +1,4 @@
-# Security headers for every page (PRD 8.10). Cloudflare Pages reads this file as it is;
-# scripts/serve-static.ts applies the same file on Railway, so the two hosts can't drift apart.
+# Security headers for every page (PRD 8.10). Cloudflare Pages reads this file as it is.
 # connect-src: the client's Supabase project (API, Auth, Storage, Edge Functions, Realtime) and Sentry.
 # cloudflareinsights.com: Cloudflare Web Analytics, which Cloudflare Pages adds to every page (no cookies).
 # img-src data: is for the authenticator QR code Supabase returns during MFA enrolment; the Supabase

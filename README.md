@@ -140,7 +140,7 @@ Copy the blocks of [`.env.example`](.env.example) into the files it names.
 
 | Command | Where | What it proves |
 |---|---|---|
-| `pnpm test` | `tests/app`, `tests/functions` | App rules, forms, PDF output, the static server, the email allowlist and email wording |
+| `pnpm test` | `tests/app`, `tests/functions` | App rules, forms, PDF output, the email allowlist and email wording |
 | `pnpm test:database` | `tests/database` | Migrations and RLS policies, on PGlite, an in-memory Postgres (no Docker needed) |
 | `pnpm test:database:before-after` | `tests/database` | Every database fix fails before its migration and passes after it |
 | `pnpm test:rls:live` | `tests/rls` | Each role reaches only what it should, on the live project. Each run leaves a record in `tests/rls/runs/`. |
@@ -190,7 +190,7 @@ caribbeantender/
 │   ├── migrations/         # Every database change, in order
 │   ├── go-live/            # Migrations held back until launch
 │   └── functions/          # download-document, send-notifications, set-user-active
-├── scripts/                # Backups, cleanup, the RLS runner, type generation, a static server
+├── scripts/                # Backups, cleanup, the RLS runner, type generation, the email templates
 ├── tests/                  # app, functions, database, rls, e2e
 └── .github/workflows/      # CI and deployment
 ```
