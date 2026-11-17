@@ -7,11 +7,17 @@
 /** A column of a table field. */
 export type FormColumn = { name: string; label: string; type: 'text' | 'number'; required?: boolean; maxLength?: number; minimum?: number };
 
-/** One field of a form. A table has rows of columns, an optional per-row total and an optional grand total. */
+/**
+ * One field of a form. A table has rows of columns, an optional per-row total and an optional grand total.
+ * A choice is one of its options; checkboxes are any of them, stored as a list. A section only groups
+ * fields under a heading.
+ */
 export type FormField = {
   name: string;
   label: string;
-  type: 'text' | 'textarea' | 'email' | 'date' | 'number' | 'table';
+  type: 'text' | 'textarea' | 'email' | 'date' | 'number' | 'table' | 'choice' | 'checkboxes';
+  section?: string;
+  options?: string[];
   required?: boolean;
   maxLength?: number;
   minimum?: number;
@@ -22,7 +28,7 @@ export type FormField = {
 
 export type FormSchema = { description?: string; fields: FormField[] };
 export type FormRow = Record<string, string | number | null>;
-export type FormData = Record<string, string | number | FormRow[] | null>;
+export type FormData = Record<string, string | number | string[] | FormRow[] | null>;
 
 const maximumTableRows = 200;
 const defaultMaximumLength: Record<string, number> = { textarea: 10_000, text: 500, email: 500, date: 500 };
@@ -50,6 +56,14 @@ function isRealDate(value: string): boolean {
 }
 
 function valueProblem(field: FormColumn | FormField, value: unknown): string | null {
+  if (field.type === 'choice' || field.type === 'checkboxes') {
+    const options = 'options' in field ? (field.options ?? []) : [];
+    if (field.type === 'choice') {
+      return typeof value === 'string' && options.includes(value) ? null : `${field.label} must be one of the listed options.`;
+    }
+    if (!Array.isArray(value)) return `${field.label} must be a list of the listed options.`;
+    return value.every((chosen) => typeof chosen === 'string' && options.includes(chosen)) ? null : `${field.label} must only contain the listed options.`;
+  }
   if (field.type === 'number') {
     if (typeof value !== 'number' || !Number.isFinite(value)) return `${field.label} must be a number.`;
     if (field.minimum !== undefined && value < field.minimum) return `${field.label} must be at least ${field.minimum}.`;
@@ -88,8 +102,12 @@ export function formProblems(schema: FormSchema, data: FormData, requireComplete
     }
     if (value.length > maximumTableRows) problems.push(`${field.label} can have at most ${maximumTableRows} rows.`);
     value.forEach((row, index) => {
+      if (!isRow(row)) {
+        problems.push(`Row ${index + 1} of ${field.label} is not in the expected format.`);
+        return;
+      }
       for (const column of field.columns ?? []) {
-        const cell = row?.[column.name];
+        const cell = row[column.name];
         if (isEmpty(cell)) {
           if (requireComplete && column.required) problems.push(`Row ${index + 1} of ${field.label}: ${column.label} is required.`);
           continue;
@@ -102,11 +120,26 @@ export function formProblems(schema: FormSchema, data: FormData, requireComplete
   return problems;
 }
 
+function isRow(row: unknown): row is FormRow {
+  return typeof row === 'object' && row !== null && !Array.isArray(row);
+}
+
+/** A table field's rows; a value that isn't a list of rows reads as no rows. */
+export function tableRows(value: FormData[string] | undefined): FormRow[] {
+  return Array.isArray(value) ? value.filter(isRow) : [];
+}
+
 /** A row's total: the product of the "multiply" columns plus the "add" columns (empty cells count as zero). */
 export function lineTotal(row: FormRow, rule: NonNullable<FormField['lineTotal']>): number {
   const numberIn = (column: string): number => (typeof row[column] === 'number' ? (row[column] as number) : 0);
   const product = (rule.multiply ?? []).reduce((total, column) => total * numberIn(column), (rule.multiply ?? []).length > 0 ? 1 : 0);
   return (rule.add ?? []).reduce((total, column) => total + numberIn(column), product);
+}
+
+/** Whether a table shows a per-row total column. A total that only repeats one column is shown as the grand total alone. */
+export function showsLineTotal(rule: FormField['lineTotal']): boolean {
+  if (!rule) return false;
+  return !((rule.add ?? []).length === 1 && (rule.multiply ?? []).length === 0);
 }
 
 /** The sum of every row's total. */
@@ -117,6 +150,7 @@ export function grandTotal(rows: FormRow[], rule: NonNullable<FormField['lineTot
 /** A value as it reads on screen and in the PDF. */
 export function displayValue(value: unknown): string {
   if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.join(', ');
   if (typeof value === 'number') return new Intl.NumberFormat('en-JM', { maximumFractionDigits: 2 }).format(value);
   return String(value);
 }

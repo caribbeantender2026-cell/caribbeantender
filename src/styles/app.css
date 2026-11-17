@@ -260,6 +260,11 @@
     @apply mt-4 rounded-md border px-4 pt-1 pb-3;
   }
 
+  /* Section headings in the client's long forms, such as "Company information". */
+  .form .form-section {
+    @apply mt-10 mb-0 border-b pb-2 text-base font-semibold text-navy-dark;
+  }
+
   .form legend {
     @apply px-1 text-sm font-medium;
   }

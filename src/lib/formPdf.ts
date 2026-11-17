@@ -3,7 +3,7 @@
  * (PRD P1-11; OPEN_QUESTIONS.md, item 14). Loaded only when someone downloads a form.
  */
 import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
-import { displayValue, grandTotal, lineTotal, type FormData, type FormRow, type FormSchema } from './forms.ts';
+import { displayValue, grandTotal, lineTotal, showsLineTotal, tableRows, type FormData, type FormSchema } from './forms.ts';
 
 // A4 in PDF points.
 const pageWidth = 595.28;
@@ -75,7 +75,11 @@ export async function formToPdf(title: string, schema: FormSchema, data: FormDat
 
   write(title, bold, titleSizePoints);
   for (const note of [schema.description ?? '', ...notes].filter(Boolean)) write(note, regular, noteSizePoints);
-  for (const field of schema.fields) {
+  for (const [index, field] of schema.fields.entries()) {
+    if (field.section && field.section !== schema.fields[index - 1]?.section) {
+      cursor -= fieldGapPoints;
+      write(field.section.toUpperCase(), bold, noteSizePoints);
+    }
     cursor -= fieldGapPoints;
     write(field.label, bold, bodySizePoints);
     const value = data[field.name];
@@ -83,11 +87,11 @@ export async function formToPdf(title: string, schema: FormSchema, data: FormDat
       write(displayValue(value) || '—', regular, bodySizePoints);
       continue;
     }
-    const rows: FormRow[] = Array.isArray(value) ? value : [];
+    const rows = tableRows(value);
     if (rows.length === 0) write('—', regular, bodySizePoints);
     rows.forEach((row, index) => {
       const cells = (field.columns ?? []).map((column) => `${column.label}: ${displayValue(row[column.name]) || '—'}`);
-      if (field.lineTotal) cells.push(`${field.lineTotal.label}: ${displayValue(lineTotal(row, field.lineTotal))}`);
+      if (field.lineTotal && showsLineTotal(field.lineTotal)) cells.push(`${field.lineTotal.label}: ${displayValue(lineTotal(row, field.lineTotal))}`);
       write(`${index + 1}. ${cells.join(' · ')}`, regular, bodySizePoints);
     });
     if (field.lineTotal && field.grandTotal) {

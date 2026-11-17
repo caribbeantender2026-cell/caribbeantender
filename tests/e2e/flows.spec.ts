@@ -79,16 +79,27 @@ test('A business posts a tender with the requirements form filled in online and 
   closesAt.setSeconds(0, 0);
 
   await page.getByRole('link', { name: 'Fill in online' }).click();
+  // The client's Tender Creation Form: only the required answers.
+  await page.getByLabel('Goods', { exact: true }).check();
   for (const [label, answer] of [
-    ['Summary of what you need', '40 office chairs'],
-    ['Scope of work', 'Supply and deliver'],
-    ['Quantities or specifications', '40 chairs, adjustable'],
-    ['Delivery location', 'Kingston'],
-    ['Required timeline', 'Within 30 days'],
+    ['Company name', 'rls-test Hotels'],
     ['Contact person', 'rls-test contact'],
+    ['Email address', 'rls-test@example.com'],
+    ['Telephone number', '876-555-0100'],
+    ['Project summary: the goods and/or services required', '40 office chairs'],
+    ['Detailed scope of work: deliverables, quantities, standards, locations and special requirements', 'Supply and deliver 40 adjustable chairs'],
+    ['Project location(s)', 'Head office'],
+    ['Authorized representative name', 'rls-test representative'],
   ] as const) {
-    await page.getByLabel(label).fill(answer);
+    await page.getByLabel(label, { exact: true }).fill(answer);
   }
+  await page.getByLabel('Kingston', { exact: true }).check();
+  await page.getByLabel('One-Time Project').check();
+  await page.getByLabel('Open Competitive Bidding').check();
+  await page.getByLabel(/^I certify that I am authorized/).check();
+  // Two fields are called "Position" (buyer contact and representative), as on the client's form.
+  await page.getByLabel('Position', { exact: true }).last().fill('Manager');
+  await page.getByLabel('Date', { exact: true }).fill('2026-11-16');
   await page.getByRole('button', { name: 'Save and attach to the draft' }).click();
   await expect(page.getByText('Filled in online.')).toBeVisible();
   await page.getByLabel('Add supporting documents').setInputFiles({ name: 'rls-test-spec.pdf', mimeType: 'application/pdf', buffer: documentBytes });
@@ -135,13 +146,32 @@ test('A supplier bids with the proposal form filled in online and gets the recei
   await page.goto(`/tenders/${tenderId}/bid`);
   await page.getByLabel('Amount (Jamaican dollars, JMD)').fill('98000');
   await page.getByLabel('Fill in the supplier proposal form online').check();
-  await page.getByLabel('What will be delivered').fill('40 chairs');
-  await page.getByLabel('Delivery timeline').fill('14 days');
-  await page.getByRole('button', { name: 'Add a row' }).click();
-  await page.getByLabel('Item, row 1').fill('Chair');
+  // The client's Bid Submission Form: only the required answers.
+  for (const [label, answer] of [
+    ['Company name', 'e2e-supplier Company'],
+    ['TRN', '123-456-789'],
+    ['Company address', 'Kingston'],
+    ['Contact person', 'rls-test supplier contact'],
+    ['Telephone number', '876-555-0101'],
+    ['Email address', 'rls-test-supplier@example.com'],
+    ['Proposal summary: why your company is best suited to deliver', '40 chairs within 14 days'],
+    ['How you will carry out the work: key activities, processes, equipment, personnel and quality assurance', 'Deliver from stock'],
+    ['Total bid value (JMD)', '98000'],
+    ['Authorized representative name', 'rls-test supplier representative'],
+    ['Position', 'Director'],
+    ['Date', '2026-11-16'],
+  ] as const) {
+    await page.getByLabel(label, { exact: true }).fill(answer);
+  }
+  // The first table is the pricing schedule, the last the references.
+  await page.getByRole('button', { name: 'Add a row' }).first().click();
+  await page.getByLabel('Item / Service, row 1').fill('Chair');
   await page.getByLabel('Quantity, row 1').fill('40');
-  await page.getByLabel('Unit cost (JMD), row 1').fill('2450');
-  await page.getByLabel('Validity period of the offer').fill('60 days');
+  await page.getByLabel('Unit price (JMD), row 1').fill('2450');
+  await page.getByRole('button', { name: 'Add a row' }).last().click();
+  await page.getByLabel('Reference name, row 1').fill('rls-test reference');
+  await page.getByLabel('Telephone, row 1').fill('876-555-0102');
+  await page.getByLabel(/^I\/We certify that the information in this bid/).check();
   page.once('dialog', (dialog) => void dialog.accept());
   await page.getByRole('button', { name: 'Submit sealed bid' }).click();
   await expect(page.getByText('Bid received')).toBeVisible();
