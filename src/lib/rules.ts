@@ -40,6 +40,16 @@ export function tenderPhase(
   }
 }
 
+// The client's "Subscription & Payment Structure" (14 Nov 2026): suppliers pay US$79 a month, or a year at 15% off.
+// ponytail: prices live here until online payments (Phase 3) read them from subscription_plans; that table
+// still holds 805 for the year, so set it to 805.80 then.
+const monthlyPriceUsd = 79;
+const annualDiscountPercent = 15;
+/** The yearly price: twelve months less the discount, to the cent (US$805.80). */
+export const annualPriceUsd = Math.round(monthlyPriceUsd * 12 * (100 - annualDiscountPercent)) / 100;
+/** The supplier prices as one sentence, for the trial messages. */
+export const subscriptionPrices = `US$${monthlyPriceUsd} a month, or US$${annualPriceUsd.toFixed(2)} a year (save ${annualDiscountPercent}%)`;
+
 /** Whether a supplier's trial or subscription currently allows bidding (same rule as private.supplier_has_access). */
 export function supplierHasAccess(
   subscription: Pick<Tables<'subscriptions'>, 'status' | 'trial_ends_at' | 'current_period_end'> | null,

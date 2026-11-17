@@ -138,6 +138,7 @@ test('A supplier whose trial has ended sees the contact message instead of the b
   await skipTour(page);
   await page.goto(`/tenders/${tenderId}/bid`);
   await expect(page.getByText('Your free trial has ended')).toBeVisible();
+  await expect(page.getByText('US$79 a month, or US$805.80 a year (save 15%)')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Submit sealed bid' })).toHaveCount(0);
 });
 

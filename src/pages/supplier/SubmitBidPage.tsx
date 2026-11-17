@@ -13,7 +13,7 @@ import type { Json } from '../../lib/database.types.ts';
 import { formProblems, type FormData } from '../../lib/forms.ts';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, bidDocumentPath, checkDocument } from '../../lib/documents.ts';
 import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
-import { supplierHasAccess, tenderPhase } from '../../lib/rules.ts';
+import { subscriptionPrices, supplierHasAccess, tenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase, supportEmail } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime } from '../../lib/time.ts';
 import { useTender } from '../TenderDetailsPage.tsx';
@@ -149,7 +149,7 @@ export function SubmitBidPage() {
     return (
       <>
         {header}
-        <Notice>Your free trial has ended, so you can't submit bids. Contact CaribbeanTender at {supportEmail} to continue.</Notice>
+        <Notice>Your free trial has ended, so you can't submit bids. A subscription is {subscriptionPrices}. Contact CaribbeanTender at {supportEmail} to subscribe.</Notice>
       </>
     );
   }
