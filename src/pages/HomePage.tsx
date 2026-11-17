@@ -37,14 +37,14 @@ const audiences = [
   },
 ];
 
-// ponytail: mirrors the draft category list (OPEN_QUESTIONS.md, item 5); update it with the client's final list.
+// Six of the client's 66 categories (one tile each), matched to the photos; the full list is on the tenders page.
 const categories = [
-  { name: 'Goods and Supplies', photo: goodsPhoto },
-  { name: 'Works', photo: worksPhoto },
-  { name: 'Professional Services', photo: professionalPhoto },
-  { name: 'Technology Services', photo: technologyPhoto },
-  { name: 'Security Services', photo: securityPhoto },
-  { name: 'Cleaning and Janitorial', photo: cleaningPhoto },
+  { name: 'Warehousing & Distribution', photo: goodsPhoto },
+  { name: 'Building & General Construction', photo: worksPhoto },
+  { name: 'Business & Management Consulting', photo: professionalPhoto },
+  { name: 'Information Technology', photo: technologyPhoto },
+  { name: 'Security & Investigation Services', photo: securityPhoto },
+  { name: 'Cleaning & Janitorial Services', photo: cleaningPhoto },
 ];
 
 const facts = [

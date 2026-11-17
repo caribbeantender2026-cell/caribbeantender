@@ -1,6 +1,7 @@
 /** Open tenders for signed-in users: soonest-closing first, filtered by one category, a page at a time (PRD P1-04). */
 import { Link, useSearchParams } from 'react-router';
 import { ChevronLeftIcon, ChevronRightIcon, Clock3Icon, SearchXIcon } from 'lucide-react';
+import { CategoryOptions } from '../components/CategoryOptions.tsx';
 import { ErrorNotice, Loading } from '../components/Notices.tsx';
 import { Badge } from '../components/ui/badge.tsx';
 import { Button } from '../components/ui/button.tsx';
@@ -49,9 +50,7 @@ export function TendersPage() {
           <Label htmlFor="categoryFilter">Category</Label>
           <NativeSelect id="categoryFilter" value={categoryId ?? ''} onChange={(event) => show(event.target.value ? Number(event.target.value) : null, 0)}>
             <option value="">All categories</option>
-            {(categoriesQuery.data ?? []).map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
+            <CategoryOptions categories={categoriesQuery.data ?? []} />
           </NativeSelect>
         </div>
       </div>

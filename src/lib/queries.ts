@@ -5,14 +5,17 @@ import { supabase } from './supabase.ts';
 /** Rows per page on the tender list (PRD P1-04: paginated). */
 export const tendersPerPage = 20;
 
+/** A category on offer: the client's name, code and procurement type (Works, Services, Goods & Supplies). */
+export type Category = { id: number; name: string; code: string | null; procurement_type: string | null };
+
 /** The active categories, in the order staff set. */
 export function useCategories() {
   return useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('categories').select('id, name').eq('is_active', true).order('sort_order');
+      const { data, error } = await supabase.from('categories').select('id, name, code, procurement_type').eq('is_active', true).order('sort_order');
       if (error) throw error;
-      return data;
+      return data satisfies Category[];
     },
   });
 }

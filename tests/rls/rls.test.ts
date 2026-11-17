@@ -111,7 +111,7 @@ async function auditActions(entityId: string): Promise<string[]> {
 
 describe(`RLS suite (${supabaseUrl})`, () => {
   before(async () => {
-    const categories = await adminClient.from('categories').select('id').order('sort_order').limit(1).single();
+    const categories = await adminClient.from('categories').select('id').eq('is_active', true).order('sort_order').limit(1).single();
     categoryId = categories.data?.id as number;
     business = await createAccount('business-alpha', 'business');
     otherBusiness = await createAccount('business-beta', 'business');

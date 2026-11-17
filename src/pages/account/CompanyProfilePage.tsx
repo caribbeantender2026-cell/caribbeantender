@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAccount, type AccountType } from '../../auth/AccountContext.tsx';
+import { CategoryOptions } from '../../components/CategoryOptions.tsx';
 import { Notice } from '../../components/Notices.tsx';
 import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
@@ -88,7 +89,7 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
             <label htmlFor="categoryId">Category (new tender alerts follow it)</label>
             <select id="categoryId" {...form.register('categoryId')}>
               <option value="">Select category</option>
-              {(categoriesQuery.data ?? []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              <CategoryOptions categories={categoriesQuery.data ?? []} />
             </select>
             {errors.categoryId && <div className="match-error">{errors.categoryId.message}</div>}
           </>

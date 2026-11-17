@@ -25,13 +25,13 @@ function has(due: DueEmail[], type: string, recipient: string, entityId: string)
 
 before(async () => {
   database = await createDatabase();
-  otherCategoryId = (await database.query<{ id: number }>(`select id from public.categories order by sort_order offset 1 limit 1`)).rows[0]?.id ?? 0;
+  otherCategoryId = (await database.query<{ id: number }>(`select id from public.categories order by is_active desc, sort_order offset 1 limit 1`)).rows[0]?.id ?? 0;
   ids.business = await createUser(database, { accountType: 'business' });
   for (const label of ['matching', 'alertsOff', 'otherCategory', 'deactivated', 'bidder']) {
     ids[label] = await createUser(database, { accountType: 'supplier' });
   }
-  // createTender files every tender under the first category; suppliers follow it unless told otherwise.
-  await writeFixture(database, `update public.supplier_profiles set category_id = (select id from public.categories order by sort_order limit 1)`);
+  // createTender files every tender under the first category on offer (harness firstCategoryId); suppliers follow it unless told otherwise.
+  await writeFixture(database, `update public.supplier_profiles set category_id = (select id from public.categories order by is_active desc, sort_order limit 1)`);
   await writeFixture(database, `update public.supplier_profiles set category_id = $2 where user_id = $1`, [ids.otherCategory, otherCategoryId]);
   await writeFixture(database, `insert into public.notification_preferences (user_id, tender_alerts) values ($1, false)`, [ids.alertsOff]);
   await writeFixture(database, `update public.profiles set is_active = false where id = $1`, [ids.deactivated]);

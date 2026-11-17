@@ -1,7 +1,7 @@
 /** Every fix suite, in migration order. Each case is named after the audit item or PRD rule it proves. */
 import type { FixSuite } from '../suite.ts';
 import { companyNamesSuite, nameViewWritesSuite } from './01-c1-company-names.ts';
-import { auditLogSuite, categoriesSuite, closesAtSuite, subscriptionsSuite } from './02-audit-subscriptions-categories-deadlines.ts';
+import { auditLogSuite, categoriesSuite, clientCategoriesSuite, closesAtSuite, subscriptionsSuite } from './02-audit-subscriptions-categories-deadlines.ts';
 import { formsSuite, tenderLifecycleSuite } from './03-forms-lifecycle.ts';
 import { bidRulesSuite, sealedBidsSuite } from './04-bids-sealed.ts';
 import { signupSuite, storagePoliciesSuite } from './05-storage-signup.ts';
@@ -26,4 +26,5 @@ export const fixSuites: FixSuite[] = [
   notificationsSuite,
   adminSuite,
   leastPrivilegeGrantsSuite,
+  clientCategoriesSuite,
 ];
