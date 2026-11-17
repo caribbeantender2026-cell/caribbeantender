@@ -2,8 +2,6 @@
 .env
 .env.*
 !.env.example
-# Public build settings only (see the file); never secrets.
-!.env.production
 *.pem
 *.key
 

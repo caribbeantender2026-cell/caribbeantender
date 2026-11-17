@@ -29,9 +29,10 @@ jobs:
 
   # Publishes the site to Cloudflare Pages after every push to main whose checks all pass, so a
   # broken build or a failing test never reaches caribbeantender.com. One deploy at a time.
-  # The build's public settings come from .env.production in the repo. Needs two repository
-  # secrets (Settings > Secrets and variables > Actions): CLOUDFLARE_API_TOKEN (Cloudflare Pages:
-  # Edit) and CLOUDFLARE_ACCOUNT_ID.
+  # Needs, under Settings > Secrets and variables > Actions: the secrets CLOUDFLARE_API_TOKEN
+  # (Cloudflare Pages: Edit) and CLOUDFLARE_ACCOUNT_ID, and the variables VITE_SUPABASE_URL,
+  # VITE_SUPABASE_PUBLISHABLE_KEY, VITE_SENTRY_DSN and VITE_SUPPORT_EMAIL (public build settings
+  # that ship to every visitor's browser, so variables rather than secrets).
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: checks
@@ -63,6 +64,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vite build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_SUPPORT_EMAIL: ${{ vars.VITE_SUPPORT_EMAIL }}
       - name: Deploy to Cloudflare Pages
         if: steps.newest.outputs.is_newest == 'true'
         uses: cloudflare/wrangler-action@v3

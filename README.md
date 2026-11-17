@@ -120,8 +120,7 @@ Copy the blocks of [`.env.example`](.env.example) into the files it names.
 
 | File | Committed | What it holds |
 |---|---|---|
-| `.env.production` | Yes | Public build settings for the live site: the Supabase URL, the publishable key, the Sentry DSN and the support address. Never secrets. |
-| `.env.local` | No | The same public settings, for local development |
+| `.env.local` | No | Public build settings: the Supabase URL, the publishable key, the Sentry DSN and the support address. For local development. The live site's build gets the same four from the repository's GitHub Actions variables. |
 | `.env.production.local` | No | For scripts only. Holds the Supabase secret key: never print it or commit it. |
 
 > [!IMPORTANT]
