@@ -76,6 +76,7 @@
   --animate-pointer-tilt: pointer-tilt 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-pointer-click: pointer-click 0.35s ease-out both;
   --animate-click-burst: click-burst 0.4s ease-out both;
+  --animate-aisle-pan: aisle-pan 18s ease-in-out infinite alternate;
 
   @keyframes fade-in {
     from { opacity: 0; }
@@ -95,6 +96,12 @@
   @keyframes click-burst {
     from { opacity: 1; transform: translateX(3px) scaleX(1); }
     to { opacity: 0; transform: translateX(10px) scaleX(1.2); }
+  }
+
+  /* The 404's photo drifts along the warehouse aisle inside the numbers, like someone searching the shelves. */
+  @keyframes aisle-pan {
+    from { background-position: 15% 40%; }
+    to { background-position: 85% 60%; }
   }
 }
 
@@ -150,6 +157,16 @@
       linear-gradient(to bottom, rgb(0 23 58 / 0.78), rgb(0 23 58 / 0.4) 42%, rgb(0 23 58 / 0.6)),
       url("../assets/photos/jamaica-hills.webp");
     @apply bg-cover bg-center;
+  }
+
+  /* The 404 page's numbers, filled with the warehouse aisle photograph instead of a colour. */
+  .photo-letters {
+    background-image: url("../assets/photos/goods-warehouse.webp");
+    background-size: 160% auto;
+    background-position: 50% 50%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
   }
 
   /*
