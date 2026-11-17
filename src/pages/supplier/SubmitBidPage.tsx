@@ -29,6 +29,9 @@ const maximumAmount = 1_000_000_000_000;
 const amountPattern = /^\d+(\.\d{1,2})?$/;
 // Postgres's "unique_violation": the one bid per supplier per tender already exists.
 const uniqueViolationCode = '23505';
+// The client's Bid Submission Form repeats the bid amount here; filled in online, it must match
+// (Rockell, 17 Nov 2026). submit_bid checks the same field.
+const formTotalField = 'total_bid_value';
 
 export function SubmitBidPage() {
   const tenderId = useParams().tenderId ?? '';
@@ -131,6 +134,10 @@ export function SubmitBidPage() {
     if (proposalMode === 'online') {
       const problems = formProblems(proposalSchema ?? { fields: [] }, proposalData, true);
       if (!proposalSchema || problems.length > 0) return setProblem(problems.join(' ') || 'The proposal form is not available.');
+      const formTotal = proposalData[formTotalField];
+      if (typeof formTotal === 'number' && formTotal !== amount) {
+        return setProblem(`The total bid value in the proposal form (${formatAmount(formTotal)}) must match your bid amount (${formatAmount(amount)}). Change one so they match.`);
+      }
     }
     const { isConfirmed } = await askToConfirm({
       title: `Submit a bid of ${formatAmount(amount)}?`,

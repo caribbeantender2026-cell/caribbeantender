@@ -59,6 +59,36 @@ export async function assertTableExists(database: PGlite, qualifiedName: string)
   assert.equal(result.rows[0]?.present, true, `${qualifiedName} should exist`);
 }
 
+type FormField = { name: string; type: string; required?: boolean; options?: string[]; columns?: FormField[] };
+
+/** A valid answer for any field type the form engine knows, so a whole form can be filled in. */
+function answerFor(field: FormField): unknown {
+  switch (field.type) {
+    case 'email':
+      return 'test@example.com';
+    case 'date':
+      return '2026-11-16';
+    case 'number':
+      return 1;
+    case 'choice':
+      return field.options?.[0];
+    case 'checkboxes':
+      return [field.options?.[0]];
+    case 'table':
+      return [Object.fromEntries((field.columns ?? []).map((column) => [column.name, answerFor(column)]))];
+    default:
+      return 'Test answer';
+  }
+}
+
+/** Every required answer of a form definition, so only the form's key can make the database refuse it. */
+export async function completeAnswers(database: PGlite, formKey: string): Promise<Record<string, unknown>> {
+  const result = await database.query<{ schema: { fields: FormField[] } }>(`select schema from public.form_definitions where key = $1 order by version desc limit 1`, [formKey]);
+  const fields = result.rows[0]?.schema.fields ?? [];
+  assert.ok(fields.length > 0, `the ${formKey} form should exist`);
+  return Object.fromEntries(fields.filter((field) => field.required).map((field) => [field.name, answerFor(field)]));
+}
+
 export async function scalar<Value>(database: PGlite, statement: string, parameters: unknown[] = []): Promise<Value> {
   const result = await database.query<{ value: Value }>(statement, parameters);
   const firstRow = result.rows[0];

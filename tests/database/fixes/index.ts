@@ -10,6 +10,7 @@ import { accountPicturesSuite } from './07-account-pictures.ts';
 import { performanceAdvisorSuite } from './08-performance-advisor.ts';
 import { emailDeliverySuite } from './09-email-delivery.ts';
 import { securityReviewSuite } from './10-security-review.ts';
+import { bidTotalSuite } from './11-bid-total.ts';
 
 // Migrations without a suite of their own: 040060 (profile columns, exercised by the deactivation
 // and onboarding cases), 040400 (enum values) and 040410 (document tables, exercised by the bid,
@@ -36,4 +37,5 @@ export const fixSuites: FixSuite[] = [
   performanceAdvisorSuite,
   emailDeliverySuite,
   securityReviewSuite,
+  bidTotalSuite,
 ];

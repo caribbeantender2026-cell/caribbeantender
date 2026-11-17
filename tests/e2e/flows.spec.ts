@@ -169,6 +169,11 @@ test('A supplier bids with the proposal form filled in online and gets the recei
   await page.getByLabel('Reference name, row 1').fill('rls-test reference');
   await page.getByLabel('Telephone, row 1').fill('876-555-0102');
   await page.getByLabel(/^I\/We certify that the information in this bid/).check();
+  // The form's total (98,020) differs from the amount typed above (98,000): refused before anything is sent.
+  await page.getByRole('button', { name: 'Submit sealed bid' }).click();
+  await expect(page.getByText('The total bid value in the proposal form ($98,020.00) must match your bid amount ($98,000.00).')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByLabel('Amount (Jamaican dollars, JMD)').fill('98020');
   await page.getByRole('button', { name: 'Submit sealed bid' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Submit my bid' }).click();
   await expect(page.getByText('Bid received')).toBeVisible();
