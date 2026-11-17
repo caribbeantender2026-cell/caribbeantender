@@ -23,8 +23,7 @@ import { formatAmount, useCompanies } from '../../lib/queries.ts';
 import { tenderPhase, tenderPhaseDisplay, type TenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime, jamaicaLocalToUtc, utcToJamaicaLocal } from '../../lib/time.ts';
-import { useTender } from '../TenderDetailsPage.tsx';
-import { listDraftFiles } from './TenderFormPage.tsx';
+import { tenderServerTime, useTender } from '../TenderDetailsPage.tsx';
 
 const maximumReasonLength = 1000;
 const sectionHeadingClasses = 'mt-6 mb-3 text-base font-semibold text-navy-dark';
@@ -124,7 +123,7 @@ export function TenderManagePage() {
   const queryClient = useQueryClient();
   const { session } = useAccount();
   // Re-rendered every second, so the page moves from "open" to "closing" at the closing time by itself.
-  const now = useNow();
+  useNow();
   const tenderQuery = useTender(tenderId);
   const [problem, setProblem] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -164,15 +163,6 @@ export function TenderManagePage() {
     setProblem(null);
     setIsBusy(true);
     try {
-      const files = await listDraftFiles(tenderId);
-      const paths = [...files.supporting, ...files.requirements].map((file) => file.path);
-      if (paths.length > 0) {
-        const removed = await supabase.storage.from('tender-documents').remove(paths);
-        if (removed.error) throw removed.error;
-      }
-      // The online requirements form isn't linked to the tender by a foreign key, so it goes by hand.
-      const form = await supabase.from('form_submissions').delete().eq('attached_to_type', 'tender').eq('attached_to_id', tenderId);
-      if (form.error) throw form.error;
       // Only drafts can be deleted; one published meanwhile (in another tab) matches no row.
       const deleted = await supabase.from('tenders').delete().eq('id', tenderId).select('id');
       if (deleted.error) throw deleted.error;
@@ -195,7 +185,7 @@ export function TenderManagePage() {
   // Anyone signed in can read a published tender; only its business manages it.
   if (!tender || tender.business_id !== session?.user.id) return <Notice tone="error">Tender not found.</Notice>;
 
-  const phase = tenderPhase(tender, now);
+  const phase = tenderPhase(tender, tenderServerTime(tenderQuery.data));
   const history: [string, string | null][] = [
     ['Created', tender.created_at],
     ['Published', tender.published_at],

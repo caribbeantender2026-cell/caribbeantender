@@ -26,6 +26,7 @@ const supabaseEmulation = `
     raw_user_meta_data jsonb not null default '{}',
     raw_app_meta_data jsonb not null default '{}',
     created_at timestamptz not null default now(),
+    banned_until timestamptz,
     last_sign_in_at timestamptz
   );
   create function auth.uid() returns uuid language sql stable as $$

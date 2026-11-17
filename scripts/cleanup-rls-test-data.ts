@@ -85,6 +85,7 @@ const protectedTriggers: Array<[string, string]> = [
   ['bid_documents', 'bid_documents_are_write_once'],
   ['tender_documents', 'tender_documents_are_write_once'],
   ['form_submissions', 'guard_form_submission'],
+  ['form_submissions', 'check_form_tender'],
   ['tenders', 'enforce_tender_lifecycle'],
   ['tenders', 'log_tender_change'],
 ];
@@ -96,6 +97,7 @@ ${disableTriggers}
 delete from public.audit_log where actor_id = any(${users}) or entity_id = any(${entities});
 -- Emails about test bids and tenders, including suppressed alerts to real suppliers in the category.
 delete from public.email_log where recipient like '${emailPattern}' or entity_id = any(${entities});
+delete from private.upload_history where owner_id = any(${users}::text[]);
 delete from public.bid_documents where bid_id = any(${bids});
 delete from public.tender_documents where tender_id = any(${tenders});
 delete from public.form_submissions where owner_id = any(${users});

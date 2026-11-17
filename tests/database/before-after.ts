@@ -6,9 +6,9 @@ import type { FixCase } from './suite.ts';
 
 type CaseOutcome = { passed: boolean; reason: string };
 
-async function runCase(fixCase: FixCase, database: Awaited<ReturnType<typeof createDatabase>>): Promise<CaseOutcome> {
+async function runCase(fixCase: FixCase, database: Awaited<ReturnType<typeof createDatabase>>, lastMigration: string): Promise<CaseOutcome> {
   try {
-    await fixCase.run(database);
+    await fixCase.run(database, lastMigration);
     return { passed: true, reason: '' };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -32,8 +32,8 @@ for (const suite of fixSuites) {
   await applyMigration(databaseAfter, suite.migration);
 
   for (const fixCase of suite.cases) {
-    const beforeOutcome = await runCase(fixCase, databaseBefore);
-    const afterOutcome = await runCase(fixCase, databaseAfter);
+    const beforeOutcome = await runCase(fixCase, databaseBefore, allMigrations[migrationIndex - 1] ?? '');
+    const afterOutcome = await runCase(fixCase, databaseAfter, suite.migration);
     const expectedBefore = fixCase.alreadyHeldBefore === true;
     const asExpected = beforeOutcome.passed === expectedBefore && afterOutcome.passed;
     if (!asExpected) {

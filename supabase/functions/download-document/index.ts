@@ -45,12 +45,19 @@ Deno.serve(async (request) => {
     if (refusal.status === 500) console.error('request_document_download failed', allowed.error);
     return reply(refusal.status, { error: refusal.message });
   }
-  const location = allowed.data as { bucket: string; path: string; file_name: string };
+  const location = allowed.data as { authorization_id: number; bucket: string; path: string; file_name: string };
 
   const asService = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', { auth: { persistSession: false } });
   const signed = await asService.storage
     .from(location.bucket)
     .createSignedUrl(location.path, signedUrlLifetimeSeconds, { download: location.file_name });
+  const logged = await asService.rpc('finish_document_download', {
+    authorization_id: location.authorization_id, succeeded: !signed.error && !!signed.data,
+  });
+  if (logged.error) {
+    console.error('Failed to record document signing outcome', logged.error.code);
+    return reply(500, { error: 'The download could not be recorded. Try again in a minute.' });
+  }
   if (signed.error || !signed.data) {
     return reply(500, { error: 'The file could not be prepared for download. Try again in a minute.' });
   }

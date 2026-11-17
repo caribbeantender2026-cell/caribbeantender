@@ -16,8 +16,9 @@
     "test:database:before-after": "node tests/database/before-after.ts",
     "types": "node scripts/generate-database-types.ts",
     "test:rls:local": "node scripts/run-rls.ts local",
+    "test:browser:local": "playwright test --config tests/browser/playwright.config.ts",
     "test:e2e": "playwright test",
-    "test:rls:live": "node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only backups/2026-11-13"
+    "test:rls:live": "node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
@@ -29,7 +30,7 @@
     "@vitejs/plugin-react": "6.1.1",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
-    "vite": "8.3.2"
+    "vite": "8.3.3"
   },
   "dependencies": {
     "@fontsource-variable/instrument-sans": "5.3.0",
@@ -50,6 +51,6 @@
     "react-markdown": "10.1.0",
     "react-router": "8.4.0",
     "tailwind-merge": "3.7.0",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   }
 }

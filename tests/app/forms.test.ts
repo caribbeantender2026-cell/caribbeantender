@@ -136,3 +136,14 @@ test('A per-row total that only repeats one column is not shown as its own colum
   assert.equal(showsLineTotal({ label: 'Total', add: ['labour', 'materials'] }), true);
   assert.equal(showsLineTotal(undefined), false);
 });
+
+test('One complete reference and a manually discounted proposal total are valid', () => {
+  const schema: FormSchema = { fields: [
+    { name: 'bid_references', label: 'References', required: true, type: 'table', columns: [{ name: 'name', label: 'Name', required: true, type: 'text' }] },
+    { name: 'pricing_schedule', label: 'Schedule', type: 'table', columns: [{ name: 'unit_price', label: 'Price', type: 'number' }] },
+    { name: 'total_bid_value', label: 'Total bid value', required: true, type: 'number' },
+  ] };
+  const answers = { bid_references: [{ name: 'Purchasing manager' }], pricing_schedule: [{ unit_price: 1000 }], total_bid_value: 700 };
+  assert.deepEqual(formProblems(schema, answers, true), []);
+  assert.match(formProblems(schema, { ...answers, bid_references: [] }, true).join(' '), /References is required/);
+});

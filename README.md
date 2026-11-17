@@ -143,7 +143,10 @@ Copy the blocks of [`.env.example`](.env.example) into the files it names.
 | `pnpm test:database` | `tests/database` | Migrations and RLS policies, on PGlite, an in-memory Postgres (no Docker needed) |
 | `pnpm test:database:before-after` | `tests/database` | Every database fix fails before its migration and passes after it |
 | `pnpm test:rls:live` | `tests/rls` | Each role reaches only what it should, on the live project. Each run leaves a record in `tests/rls/runs/`. |
+| `pnpm test:browser:local` | `tests/browser` and public screens | Chrome on loopback, including a fast device clock and a lost submission response |
 | `pnpm test:e2e` | `tests/e2e` | In Google Chrome, against the live project: a business posts a tender, a supplier bids, and the business awards it |
+
+The live RLS check compares salted primary-key fingerprints in memory and records only per-table counts. The separate manual backup script still creates a full export when explicitly run.
 
 The live suites create their own test accounts already confirmed and delete everything they made when they finish. Run records are written only by the runner: never edit them by hand.
 
@@ -160,6 +163,28 @@ flowchart LR
 - **Headers:** [`public/_headers`](public/_headers) sets a strict Content Security Policy, HSTS and the other security headers. Hashed files under `/assets/` are cached for a year.
 - **Database and functions:** migrations and Edge Functions are deployed by hand with the Supabase CLI, not by CI. Migrations are applied one at a time with `supabase db push --linked`, after they are committed.
 - **Email:** until launch, the `EMAIL_ALLOWLIST` Edge Function secret limits app emails to a short list of addresses. At launch it changes to `*`. Every email uses one branded frame (`brandedEmail` in `supabase/functions/send-notifications/notifications.ts`). `node scripts/write-auth-email-templates.ts` writes the same frame into `supabase/templates/` for the Supabase Auth emails, which are pasted into Authentication > Emails > Templates.
+
+The development dependency picomatch 4.0.7 has an outstanding advisory for repeated extglob patterns. Vite uses it for build-time file matching. Keep build patterns under maintainer control and upgrade when a fixed version is available. The full dependency audit reports it. [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+
+### Backing up and restoring Storage
+
+Keep private copies of all four buckets: `tender-documents`, `bid-documents`, `account-pictures` and `form-templates`, including their paths and ownership metadata. Database backups contain file metadata only. Restore the database and the corresponding object bytes together, then verify representative downloads. Use the Storage API or the project's S3 interface for file contents.
+
+Export the approved Word originals before a move or restore:
+
+```sh
+node --env-file=.env.production.local scripts/provision-form-templates.ts export backups/form-templates
+```
+
+Keep this directory and its checksum manifest in the private backup. On a new project, apply the migrations, set `TEMPLATE_SUPABASE_URL` and `TEMPLATE_SUPABASE_SECRET_KEY` for the destination in the shell, and run:
+
+```sh
+node scripts/provision-form-templates.ts install backups/form-templates
+```
+
+Bid receipts survive worker downtime. The sender retains its five-attempt limit for provider failures. Exhausted receipts remain in the private queue and email log for operator review. Verify delivery with the provider before resetting attempts on a failed receipt.
+
+The installer uploads and verifies each file before enabling its download. For the pilot fixes, apply migration `20261117060000` and then `20261117060100`. Verify both are listed as applied before deploying `download-document` and `send-notifications`. Deploy the frontend after the database and functions. The scheduled notification worker also retries removal of files from deleted drafts.
 
 ## Security
 

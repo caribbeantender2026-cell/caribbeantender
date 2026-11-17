@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import {
   anonymous,
   createBid,
-  createStoredFile,
   createTender,
   createTenderDocument,
   createUser,
@@ -136,7 +135,7 @@ export const storagePoliciesSuite: FixSuite = {
     },
     {
       name: 'P1-05/P1-14: request_document_download lets signed-in users have published tender files, and logs each request',
-      run: async (database) => {
+      run: async (database, lastMigration) => {
         const businessId = await createUser(database, { accountType: 'business' });
         const supplierId = await createUser(database, { accountType: 'supplier' });
         const { documentId, documentPath } = await createTenderDocument(database, await createTender(database, businessId, 'accepting-bids'), businessId);
@@ -146,7 +145,7 @@ export const storagePoliciesSuite: FixSuite = {
           'request',
         )[0]?.location;
         assert.deepEqual(location && { bucket: location.bucket, path: location.path }, { bucket: 'tender-documents', path: documentPath });
-        assert.deepEqual(await auditActions(database, documentId), ['document_download_url_issued']);
+        assert.deepEqual(await auditActions(database, documentId), [lastMigration >= '20261117060100' ? 'document_download_authorized' : 'document_download_url_issued']);
       },
     },
     {
@@ -178,7 +177,7 @@ export const storagePoliciesSuite: FixSuite = {
         assertRefused(await uploadAs(database, otherBusinessId, 'tender-documents', `${draftId}/planted.pdf`), "upload into someone else's draft");
         assertSucceeded(await uploadAs(database, businessId, 'tender-documents', `${draftId}/specification.pdf`), 'upload into own draft');
         for (let uploadNumber = 1; uploadNumber < maximumDailyUploads; uploadNumber += 1) {
-          await createStoredFile(database, 'tender-documents', `${draftId}/file-${uploadNumber}.pdf`, businessId);
+          assertSucceeded(await uploadAs(database, businessId, 'tender-documents', `${draftId}/file-${uploadNumber}.pdf`), 'upload within quota');
         }
         assertRefused(await uploadAs(database, businessId, 'tender-documents', `${draftId}/one-too-many.pdf`), 'upload number 21');
         const expiredSupplierId = await createUser(database, { accountType: 'supplier' });

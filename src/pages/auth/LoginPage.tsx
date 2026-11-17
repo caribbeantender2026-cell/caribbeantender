@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { createAccount, loadAccounts, type AccountType } from '../../auth/AccountContext.tsx';
+import { createAccount, loadAccounts, useAccount, type AccountType } from '../../auth/AccountContext.tsx';
 import { Notice } from '../../components/Notices.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader } from '../../components/ui/card.tsx';
@@ -24,7 +24,7 @@ export function LoginPage() {
   const [searchParameters] = useSearchParams();
   const queryClient = useQueryClient();
   const [problem, setProblem] = useState<string | null>(null);
-  const [needsChoice, setNeedsChoice] = useState(false);
+  const { businessProfile, supplierProfile } = useAccount();
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
@@ -62,7 +62,7 @@ export function LoginPage() {
       } else if (!accounts.businessProfile && !accounts.supplierProfile) {
         setProblem('You are logged in, but this email has no Business or Supplier account yet. Add one from the menu under your name, top right.');
       } else if (accounts.businessProfile && accounts.supplierProfile) {
-        setNeedsChoice(true);
+        void navigate('/login?choose=account', { replace: true });
       } else {
         void navigate(accounts.businessProfile ? '/business' : '/supplier');
       }
@@ -83,7 +83,7 @@ export function LoginPage() {
     setProblem(null);
   }
 
-  if (needsChoice) {
+  if (searchParameters.get('choose') === 'account' && businessProfile && supplierProfile) {
     return (
       <Card className="w-[calc(100%-2rem)] max-w-md py-8">
         <CardHeader className="px-8">

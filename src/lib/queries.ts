@@ -30,7 +30,7 @@ export function useOpenTenders(categoryId: number | null, page: number) {
         .from('tenders')
         .select('id, business_id, title, closes_at, status, category_id', { count: 'exact' })
         .eq('status', 'open')
-        .gt('closes_at', new Date().toISOString())
+        .gt('closes_at', 'now')
         .order('closes_at')
         // Tenders closing at the same moment keep one order, so none repeats or goes missing between pages.
         .order('id')

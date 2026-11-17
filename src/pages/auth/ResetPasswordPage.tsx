@@ -1,6 +1,6 @@
 /** Set a new password from the link in the reset email. */
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,11 +8,9 @@ import { Notice } from '../../components/Notices.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
 import { Field, Input, PasswordInput } from '../../components/ui/fields.tsx';
-import { cameFromResetLink, errorMessage, supabase } from '../../lib/supabase.ts';
+import { recoverySession, resetRecoveredPassword, errorMessage, supabase } from '../../lib/supabase.ts';
 
 const minimumPasswordLength = 8;
-// Supabase reads the recovery token from the link asynchronously; give it a moment before giving up.
-const recoveryCheckDelayMilliseconds = 1200;
 
 const resetSchema = z
   .object({
@@ -24,35 +22,45 @@ type ResetValues = z.infer<typeof resetSchema>;
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
-  const [linkState, setLinkState] = useState<'verifying' | 'ready' | 'invalid'>(cameFromResetLink() ? 'ready' : 'verifying');
+  const { hash } = useLocation();
+  const linkParameters = new URLSearchParams(hash.slice(1));
+  const linkFailed = linkParameters.has('error') || linkParameters.has('error_code');
+  const [verifiedState, setLinkState] = useState<'verifying' | 'ready' | 'invalid'>('verifying');
+  const linkState = linkFailed ? 'invalid' : verifiedState;
   const [problem, setProblem] = useState<string | null>(null);
   const form = useForm<ResetValues>({ resolver: zodResolver(resetSchema) });
   const { errors, isSubmitting } = form.formState;
 
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((authEvent, session) => {
-      if (authEvent === 'PASSWORD_RECOVERY' && session) setLinkState('ready');
+    if (linkFailed) {
+      recoverySession.clear();
+      setLinkState('invalid');
+      return;
+    }
+    let initialCheck: number | undefined;
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      window.clearTimeout(initialCheck);
+      if (event === 'INITIAL_SESSION' && !recoverySession.matches(session)) {
+        // Auth queues PASSWORD_RECOVERY on the next task after reading a valid link.
+        initialCheck = window.setTimeout(() => setLinkState(recoverySession.matches(session) ? 'ready' : 'invalid'), 0);
+        return;
+      }
+      setLinkState(recoverySession.matches(session) ? 'ready' : 'invalid');
     });
-    // A session alone is not enough: it may belong to whoever was already signed in on this computer.
-    const timer = window.setTimeout(() => {
-      setLinkState(cameFromResetLink() ? 'ready' : 'invalid');
-    }, recoveryCheckDelayMilliseconds);
     return () => {
+      window.clearTimeout(initialCheck);
       listener.subscription.unsubscribe();
-      window.clearTimeout(timer);
     };
-  }, []);
+  }, [linkFailed]);
 
   async function updatePassword(values: ResetValues) {
     setProblem(null);
-    const { error } = await supabase.auth.updateUser({ password: values.password });
-    if (error) {
+    try {
+      await resetRecoveredPassword(values.password);
+      void navigate('/login?reset=success');
+    } catch (error) {
       setProblem(errorMessage(error));
-      return;
     }
-    // Every device, unlike Log out: a reset often follows a lost or stolen password.
-    await supabase.auth.signOut({ scope: 'global' });
-    void navigate('/login?reset=success');
   }
 
   return (
@@ -62,6 +70,7 @@ export function ResetPasswordPage() {
         <p>Enter your new password below. Both password fields must match.</p>
       </CardHeader>
       <CardContent className="px-8">
+        {problem && <Notice tone="error">{problem}</Notice>}
         {linkState === 'verifying' && <Notice>Verifying your password-reset link…</Notice>}
         {linkState === 'invalid' && (
           <Notice tone="error">
@@ -77,7 +86,6 @@ export function ResetPasswordPage() {
               <PasswordInput id="confirmNewPassword" autoComplete="new-password" {...form.register('confirmPassword')} />
             </Field>
             <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">Use at least {minimumPasswordLength} characters. A longer passphrase is recommended.</div>
-            {problem && <Notice tone="error">{problem}</Notice>}
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Updating…' : 'Update Password'}</Button>
               <Button asChild variant="gold"><Link to="/login">Back to Login</Link></Button>

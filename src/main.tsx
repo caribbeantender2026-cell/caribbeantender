@@ -2,7 +2,6 @@
 import { StrictMode, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from 'react-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AccountProvider } from './auth/AccountContext.tsx';
 import { AccountLayout, PublicLayout, RequireSignIn } from './components/Frame.tsx';
 import { CrashPage } from './pages/CrashPage.tsx';
@@ -12,8 +11,6 @@ import { NotFoundPage } from './pages/NotFoundPage.tsx';
 import '@fontsource-variable/newsreader/opsz.css';
 import '@fontsource-variable/instrument-sans';
 import './styles/app.css';
-
-const cacheLifetimeMilliseconds = 30_000;
 
 // One address for the site: sign-ins are kept per address, and every email links to the bare domain.
 // ponytail: done here because Cloudflare Pages' _redirects can't redirect between domains; a Cloudflare
@@ -90,10 +87,6 @@ const router = createBrowserRouter([
   },
 ]);
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: cacheLifetimeMilliseconds, retry: 1 } },
-});
-
 // Error reporting (PRD 9.1; OPEN_QUESTIONS.md, item 15): off until VITE_SENTRY_DSN is set, and then
 // loaded after the app, so it never slows the first page. No personal data is sent.
 const sentryDsn: string = import.meta.env.VITE_SENTRY_DSN ?? '';
@@ -108,10 +101,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <AccountProvider>
-        <RouterProvider router={router} />
-      </AccountProvider>
-    </QueryClientProvider>
+    <AccountProvider>
+      <RouterProvider router={router} />
+    </AccountProvider>
   </StrictMode>,
 );

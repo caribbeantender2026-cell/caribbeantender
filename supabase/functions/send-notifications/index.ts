@@ -18,6 +18,23 @@ Deno.serve(async (request) => {
   if (!secretMatches(request.headers.get('x-cron-secret'), expectedSecret.data ?? undefined)) {
     return new Response('Not allowed.', { status: 401 });
   }
+  // Cleanup entries commit with the draft deletion. Removal and acknowledgement
+  // are idempotent, so overlapping runs and lost responses are safe.
+  const cleanup = await database.from('draft_file_cleanup').select('path').order('queued_at').limit(100);
+  if (cleanup.error) {
+    console.error('Reading draft file cleanup failed', cleanup.error.code);
+  } else if (cleanup.data.length) {
+    const paths = cleanup.data.map((entry) => entry.path as string);
+    const removed = await database.storage.from('tender-documents').remove(paths);
+    if (!removed.error) {
+      const acknowledgement = await database.from('draft_file_cleanup').delete().in('path', paths);
+      if (acknowledgement.error) console.error('Acknowledging draft file cleanup failed', acknowledgement.error.code);
+    } else {
+      // Rotate failed paths behind the rest of the queue for the next run.
+      const retry = await database.from('draft_file_cleanup').update({ queued_at: new Date().toISOString() }).in('path', paths);
+      console.error('Removing draft files failed', removed.error.message, retry.error?.code);
+    }
+  }
   const due = await database.rpc('due_emails', { batch_size: batchSize });
   if (due.error) {
     return new Response(`Could not read the due emails: ${due.error.message}`, { status: 500 });

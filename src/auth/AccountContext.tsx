@@ -1,11 +1,14 @@
 /** The signed-in person's session and their business and supplier accounts, shared across the app. */
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.ts';
 import type { Tables } from '../lib/database.types.ts';
 
+/** The two account types a login can operate. */
 export type AccountType = 'business' | 'supplier';
+
+const cacheLifetimeMilliseconds = 30_000;
 
 type AccountState = {
   session: Session | null;
@@ -51,24 +54,28 @@ export async function createAccount(accountType: AccountType, session: Session):
 
 /** Provides the session and accounts to every page, and keeps them in step with Supabase Auth. */
 export function AccountProvider({ children }: { children: ReactNode }) {
-  const queryClient = useQueryClient();
-  const [session, setSession] = useState<Session | null>(null);
-  const [isSessionLoading, setIsSessionLoading] = useState(true);
-
+  const [auth, setAuth] = useState<{ session: Session | null; loading: boolean; generation: number }>({ session: null, loading: true, generation: 0 });
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setIsSessionLoading(false);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((authEvent, nextSession) => {
-      setSession(nextSession);
-      // However the session ended (Log out, another tab, an expired refresh), nothing cached for one
-      // person may be shown to whoever signs in next.
-      if (authEvent === 'SIGNED_OUT') queryClient.clear();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuth((previous) => ({
+        session, loading: false,
+        generation: previous.generation + (previous.session && previous.session.user.id !== session?.user.id ? 1 : 0),
+      }));
     });
     return () => listener.subscription.unsubscribe();
-  }, [queryClient]);
+  }, []);
+  // A new identity must also lose the old account's unsaved React form state.
+  return <AccountCache key={auth.generation} session={auth.session} loading={auth.loading}>{children}</AccountCache>;
+}
 
+function AccountCache({ session, loading, children }: { session: Session | null; loading: boolean; children: ReactNode }) {
+  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: cacheLifetimeMilliseconds, retry: 1 } } }));
+  useEffect(() => () => client.clear(), [client]);
+  return <QueryClientProvider client={client}><Accounts session={session} isSessionLoading={loading}>{children}</Accounts></QueryClientProvider>;
+}
+
+function Accounts({ session, isSessionLoading, children }: { session: Session | null; isSessionLoading: boolean; children: ReactNode }) {
+  const queryClient = useQueryClient();
   const userId = session?.user.id ?? null;
   const accountsQuery = useQuery({
     queryKey: ['accounts', userId],

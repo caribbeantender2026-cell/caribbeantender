@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { before, test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
-import { applyMigration, createDatabase, listMigrations, runAs, user } from './harness.ts';
+import { applyMigration, createDatabase, createUser, listMigrations, runAs, user } from './harness.ts';
 
 const baselineMigrations = ['20261005025300_remote_schema.sql', '20261005031017_revoke_writes_on_public_name_views.sql'];
 const millisecondsPerDay = 86_400_000;
@@ -211,4 +211,36 @@ test('The migration stops, rather than guessing, when a subscription status is u
   }
   await assert.rejects(applyMigration(strayDatabase, '20261005040200_subscriptions.sql'), /canceled/);
   await strayDatabase.close();
+});
+
+test('The reference-label migration preserves the original versions, other fields and saved answers', async () => {
+  const migration = '20261117060000_drafts_accounts_and_proposals.sql';
+  const localDatabase = await createDatabase(listMigrations().filter((name) => name < migration));
+  try {
+    const owner = await createUser(localDatabase, { accountType: 'supplier' });
+    const forms = [
+      { key: 'supplier-proposal', version: 2, field: 'bid_references', label: 'References (at least one; two recommended)', reference: { name: 'Sample buyer', phone: '123' } },
+      { key: 'supplier-registration', version: 1, field: 'business_references', label: 'Business references (at least one; two recommended)', reference: { company: 'Sample buyer', phone: '123' } },
+    ];
+    for (const form of forms) {
+      await localDatabase.query('insert into public.form_submissions(owner_id,form_key,form_version,data) values ($1,$2,$3,$4)',
+        [owner, form.key, form.version, JSON.stringify({ [form.field]: [form.reference] })]);
+    }
+    const savedAnswers = async () => (await localDatabase.query('select * from public.form_submissions where owner_id=$1 order by id', [owner])).rows;
+    const definitions = async () => (await localDatabase.query<{ key: string; version: number; schema: { fields: { name: string; label: string }[] } }>(
+      'select key, version, schema from public.form_definitions order by key,version')).rows;
+    const originalAnswers = await savedAnswers();
+    const expectedDefinitions = await definitions();
+    for (const form of forms) {
+      const version = expectedDefinitions.find((definition) => definition.key === form.key && definition.version === form.version);
+      const field = version?.schema.fields.find((field) => field.name === form.field);
+      assert.ok(field);
+      field.label = form.label;
+    }
+    await applyMigration(localDatabase, migration);
+    assert.deepEqual(await savedAnswers(), originalAnswers);
+    assert.deepEqual(await definitions(), expectedDefinitions);
+  } finally {
+    await localDatabase.close();
+  }
 });

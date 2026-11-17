@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
-import { createBid, createStoredFile, createTender, createUser, makeStaff, runAs, setTenderState, user, writeFixture } from '../harness.ts';
+import { createBid, createTender, createUser, makeStaff, runAs, setTenderState, user, writeFixture } from '../harness.ts';
 import { assertRefused, assertSucceeded, completeAnswers, uploadAs, type FixSuite } from '../suite.ts';
 
 const maximumDailyBidUploads = 50;
@@ -18,7 +18,7 @@ export const securityReviewSuite: FixSuite = {
   cases: [
     {
       name: 'P1-09: admins see no bid submitted or bid file download in the log before the closing time, and see both once bids open',
-      run: async (database) => {
+      run: async (database, lastMigration) => {
         const adminId = await createUser(database, { accountType: 'business' });
         await makeStaff(database, adminId);
         const businessId = await createUser(database, { accountType: 'business' });
@@ -28,12 +28,13 @@ export const securityReviewSuite: FixSuite = {
         await writeFixture(database, `select private.write_audit_log('bid_submitted', 'bid', $1, jsonb_build_object('tender_id', $2::text))`, [bid.bidId, tenderId]);
         // The supplier downloading their own bid file is logged with the file's path, which names the tender and bid.
         assertSucceeded(await runAs(database, user(supplierId), `select public.request_document_download($1)`, [bid.documentId]), 'supplier downloads own bid file');
+        const action = lastMigration >= '20261117060100' ? 'document_download_authorized' : 'document_download_url_issued';
         assert.equal(await adminReadsLogFor(database, adminId, 'bid_submitted', bid.bidId), 0, 'bid submitted, while sealed');
-        assert.equal(await adminReadsLogFor(database, adminId, 'document_download_url_issued', bid.documentId ?? ''), 0, 'bid file download, while sealed');
+        assert.equal(await adminReadsLogFor(database, adminId, action, bid.documentId ?? ''), 0, 'bid file download, while sealed');
 
         await writeFixture(database, `update public.tenders set closes_at = now() - interval '1 minute' where id = $1`, [tenderId]);
         assert.equal(await adminReadsLogFor(database, adminId, 'bid_submitted', bid.bidId), 1, 'bid submitted, once bids are open');
-        assert.equal(await adminReadsLogFor(database, adminId, 'document_download_url_issued', bid.documentId ?? ''), 1, 'bid file download, once bids are open');
+        assert.equal(await adminReadsLogFor(database, adminId, action, bid.documentId ?? ''), 1, 'bid file download, once bids are open');
       },
     },
     {
@@ -89,7 +90,7 @@ export const securityReviewSuite: FixSuite = {
         const tenderId = await createTender(database, businessId, 'accepting-bids');
         const bidId = randomUUID();
         for (let uploadNumber = 1; uploadNumber < maximumDailyBidUploads; uploadNumber += 1) {
-          await createStoredFile(database, 'bid-documents', `${tenderId}/${bidId}/file-${uploadNumber}.pdf`, supplierId);
+          assertSucceeded(await uploadAs(database, supplierId, 'bid-documents', `${tenderId}/${bidId}/file-${uploadNumber}.pdf`), 'upload within quota');
         }
         assertSucceeded(await uploadAs(database, supplierId, 'bid-documents', `${tenderId}/${bidId}/file-50.pdf`), 'upload number 50');
         assertRefused(await uploadAs(database, supplierId, 'bid-documents', `${tenderId}/${bidId}/file-51.pdf`), 'upload number 51');

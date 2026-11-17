@@ -19,7 +19,7 @@ export type FixCase = {
   // True when the schema before the migration already behaved correctly: the case guards against a
   // regression rather than proving the fix, so it is expected to pass before the migration too.
   alreadyHeldBefore?: boolean;
-  run: (database: PGlite) => Promise<void>;
+  run: (database: PGlite, lastMigration: string) => Promise<void>;
 };
 
 export type FixSuite = {

@@ -17,7 +17,7 @@ export type EmailServices = {
   /** Takes back an existing row whose retry is due (public.reclaim_email); false if none, or another run got it. */
   reclaimLogRow: (email: OutgoingEmail) => Promise<boolean>;
   /** Records how a pending email ended. */
-  finishLogRow: (email: OutgoingEmail, status: 'sent' | 'failed', providerMessageId: string | null) => Promise<void>;
+  finishLogRow: (email: OutgoingEmail, status: 'sent' | 'failed' | 'suppressed', providerMessageId: string | null) => Promise<void>;
   /** Hands the email to Resend, with idempotencyKey(email), and returns its message id. */
   deliver: (email: OutgoingEmail) => Promise<string>;
 };
@@ -62,7 +62,10 @@ export async function idempotencyKey(email: OutgoingEmail): Promise<string> {
  */
 export async function sendEmail(email: OutgoingEmail, isAllowed: (recipient: string) => boolean, services: EmailServices): Promise<EmailOutcome> {
   if (!isAllowed(email.recipient)) {
-    return (await services.claimLogRow(email, 'suppressed')) ? 'suppressed' : 'already_handled';
+    if (await services.claimLogRow(email, 'suppressed')) return 'suppressed';
+    if (!await services.reclaimLogRow(email)) return 'already_handled';
+    await services.finishLogRow(email, 'suppressed', null);
+    return 'suppressed';
   }
   const isClaimed = (await services.claimLogRow(email, 'pending')) || (await services.reclaimLogRow(email));
   if (!isClaimed) {

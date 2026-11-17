@@ -117,6 +117,8 @@ export const adminSuite: FixSuite = {
           await runAs(database, user(businessId), `insert into public.tenders (business_id, title, description, closes_at) values ($1, 'New draft', 'x', now() + interval '7 days')`, [businessId]),
           'create a draft while deactivated',
         );
+        // The Edge Function applied the requested ban in Auth.
+        await database.query("update auth.users set banned_until=now() + interval '1 year' where id=$1", [businessId]);
         assertSucceeded(await runAs(database, user(adminId, 'aal2'), `select public.admin_set_user_active($1, true)`, [businessId]), 'reactivate');
         assertSucceeded(await runAs(database, user(businessId), `select public.publish_tender($1)`, [draftId]), 'publish after reactivation');
         assert.deepEqual(await auditActions(database, businessId), ['admin_user_deactivated', 'admin_user_reactivated']);
@@ -237,7 +239,7 @@ export const leastPrivilegeGrantsSuite: FixSuite = {
     },
     {
       name: 'M7: signed-in users can call exactly the intended functions, and visitors none',
-      run: async (database) => {
+      run: async (database, lastMigration) => {
         const result = await database.query<{ role_name: string; function_name: string }>(
           `select role_name, namespace.nspname || '.' || function_row.proname as function_name
            from pg_proc function_row
@@ -267,6 +269,7 @@ export const leastPrivilegeGrantsSuite: FixSuite = {
           'public.read_tender_bids',
           'public.record_onboarding_completed',
           'public.request_document_download',
+          ...(lastMigration >= '20261117060000' ? ['public.server_time'] : []),
           'public.submit_bid',
         ].sort((first, second) => first.localeCompare(second)).map((functionName) => ({ role_name: 'authenticated', function_name: functionName })));
       },

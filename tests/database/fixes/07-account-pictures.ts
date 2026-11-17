@@ -1,7 +1,7 @@
 /** Account pictures: own folder only, a daily limit, and shared with signed-in users through company_names. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { anonymous, createStoredFile, createUser, runAs, user } from '../harness.ts';
+import { anonymous, createUser, runAs, user } from '../harness.ts';
 import { assertNothingReachable, assertRefused, assertSucceeded, scalar, uploadAs, type FixSuite } from '../suite.ts';
 
 const bucket = 'account-pictures';
@@ -62,8 +62,9 @@ export const accountPicturesSuite: FixSuite = {
           1,
           'the owner removes their own picture',
         );
-        for (let uploadNumber = 0; uploadNumber < maximumDailyUploads; uploadNumber += 1) {
-          await createStoredFile(database, bucket, picturePath(ownerId), ownerId);
+        const count = await runAs<{ used: number }>(database, user(ownerId), 'select private.uploads_in_last_day($1) as used', [bucket]);
+        for (let used = assertSucceeded(count, 'get the rolling quota')[0]!.used; used < maximumDailyUploads; used++) {
+          assertSucceeded(await uploadAs(database, ownerId, bucket, picturePath(ownerId)), 'upload within quota');
         }
         assertRefused(await uploadAs(database, ownerId, bucket, picturePath(ownerId)), 'upload number 21 in a day');
       },

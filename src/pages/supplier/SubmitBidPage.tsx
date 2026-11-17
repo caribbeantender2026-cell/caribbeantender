@@ -22,13 +22,11 @@ import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
 import { subscriptionPrices, supplierHasAccess, tenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase, supportEmail } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime } from '../../lib/time.ts';
-import { useTender } from '../TenderDetailsPage.tsx';
+import { tenderServerTime, useTender } from '../TenderDetailsPage.tsx';
 
 // Matches submit_bid: above zero, below 10^12 (numeric(14,2)), at most two decimal places.
 const maximumAmount = 1_000_000_000_000;
 const amountPattern = /^\d+(\.\d{1,2})?$/;
-// Postgres's "unique_violation": the one bid per supplier per tender already exists.
-const uniqueViolationCode = '23505';
 // The client's Bid Submission Form repeats the bid amount here; filled in online, it must match
 // (Rockell, 17 Nov 2026). submit_bid checks the same field.
 const formTotalField = 'total_bid_value';
@@ -69,8 +67,9 @@ export function SubmitBidPage() {
   for (const query of [tenderQuery, subscriptionQuery, existingBidQuery]) {
     if (query.isError) return <ErrorNotice error={query.error} />;
   }
-  const tender = tenderQuery.data?.tender ?? null;
-  if (!tender) return <Notice tone="error">Tender not found.</Notice>;
+  const details = tenderQuery.data;
+  const tender = details?.tender;
+  if (!details || !tender) return <Notice tone="error">Tender not found.</Notice>;
   const existingBid = existingBidQuery.data;
 
   /**
@@ -124,7 +123,7 @@ export function SubmitBidPage() {
     if (!amountPattern.test(amountText.trim()) || !(amount > 0) || amount >= maximumAmount) {
       return setProblem('Enter a bid amount above zero, with at most two decimal places.');
     }
-    if (tender && tenderPhase(tender) !== 'accepting-bids') {
+    if (tender && details && tenderPhase(tender, tenderServerTime(details)) !== 'accepting-bids') {
       return setProblem(`This tender closed at ${formatJamaicaDateTime(tender.closes_at)} Jamaica time, so it no longer takes bids.`);
     }
     const proposalSchema = proposalDefinitionQuery.data?.parsedSchema;
@@ -162,11 +161,15 @@ export function SubmitBidPage() {
       await queryClient.invalidateQueries({ queryKey: ['own-bid', tenderId, supplierId] });
       await queryClient.invalidateQueries({ queryKey: ['own-bids'] });
     } catch (error) {
-      const isDuplicateBid = typeof error === 'object' && error !== null && 'code' in error && error.code === uniqueViolationCode;
-      if (isDuplicateBid) {
-        // Another tab sent this supplier's bid first; show its receipt.
-        await queryClient.invalidateQueries({ queryKey: ['own-bid', tenderId, supplierId] });
+      // A timeout can follow a committed submission. Always reconcile with the
+      // supplier's receipt before reporting that the submission failed.
+      const receipt = await existingBidQuery.refetch();
+      if (receipt.data) {
+        await queryClient.invalidateQueries({ queryKey: ['own-bids'] });
         return;
+      }
+      if (receipt.isError) {
+        return setProblem('We could not confirm whether the bid was received. Check My bids when your connection returns.');
       }
       setProblem(errorMessage(error));
     } finally {
@@ -184,7 +187,7 @@ export function SubmitBidPage() {
   if (existingBid) {
     return <>{header}<BidReceipt amount={existingBid.amount} currency={existingBid.currency} submittedAt={existingBid.submitted_at} /></>;
   }
-  if (!supplierHasAccess(subscriptionQuery.data ?? null)) {
+  if (!supplierHasAccess(subscriptionQuery.data ?? null, tenderServerTime(details))) {
     return (
       <>
         {header}
@@ -192,7 +195,7 @@ export function SubmitBidPage() {
       </>
     );
   }
-  if (tenderPhase(tender) !== 'accepting-bids') {
+  if (tenderPhase(tender, tenderServerTime(details)) !== 'accepting-bids') {
     return <>{header}<Notice tone="error">This tender is no longer taking bids.</Notice></>;
   }
 

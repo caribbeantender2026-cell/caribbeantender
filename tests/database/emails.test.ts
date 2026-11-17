@@ -48,6 +48,8 @@ before(async () => {
 
   ids.freshBid = (await createBid(database, ids.closingTender ?? '', ids.bidder ?? '')).bidId;
   await writeFixture(database, `update public.bids set submitted_at = now() - interval '2 minutes' where id = $1`, [ids.freshBid]);
+  // createBid imports legacy rows with triggers disabled. This one represents a new submission.
+  await database.query('insert into private.bid_receipt_queue(bid_id,recipient) values ($1,$2)', [ids.freshBid, await emailOf(ids.bidder ?? '')]);
   ids.oldBid = (await createBid(database, ids.oldTender ?? '', ids.bidder ?? '')).bidId;
   await writeFixture(database, `update public.bids set submitted_at = now() - interval '2 days' where id = $1`, [ids.oldBid]);
 

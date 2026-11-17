@@ -16,6 +16,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      draft_file_cleanup: {
+        Row: { path: string; queued_at: string }
+        Insert: { path: string; queued_at?: string }
+        Update: { path?: string; queued_at?: string }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -845,6 +851,7 @@ export type Database = {
       admin_list_users: {
         Args: { page_offset?: number; page_size?: number; search?: string }
         Returns: {
+          auth_sync_pending: boolean
           business_name: string
           created_at: string
           email: string
@@ -905,9 +912,17 @@ export type Database = {
         }
         Returns: undefined
       }
+      finish_document_download: {
+        Args: { authorization_id: number; succeeded: boolean }
+        Returns: undefined
+      }
       request_document_download: {
         Args: { document_id: string }
         Returns: Json
+      }
+      server_time: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       submit_bid: {
         Args: {

@@ -9,34 +9,42 @@ import { ErrorNotice, Loading, Notice } from '../components/Notices.tsx';
 import { TenderView, useNow } from '../components/TenderView.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { useCategories, useCompanies } from '../lib/queries.ts';
-import { tenderPhase } from '../lib/rules.ts';
 import { supabase } from '../lib/supabase.ts';
 
 // The close job sets "closed" within a minute of the closing time.
 const closingCheckMilliseconds = 10_000;
+const maximumTimerMilliseconds = 2_147_483_647;
 
-/**
- * A tender and its recorded documents, as the signed-in user may see them. Past its closing time and
- * not yet closed, it is fetched again every few seconds, so the page moves on once the close job runs.
- * The calling page must re-render as time passes (useNow) for that check to start.
- */
+/** Add monotonic elapsed time to a database timestamp, independent of the device's clock settings. */
+export function tenderServerTime(sample: { serverMilliseconds: number; observedMilliseconds: number }): Date {
+  return new Date(sample.serverMilliseconds + performance.now() - sample.observedMilliseconds);
+}
+
+/** Read tender details and current bid eligibility using the database clock. */
 export function useTender(tenderId: string) {
+  const { session } = useAccount();
   return useQuery({
-    queryKey: ['tender', tenderId],
+    queryKey: ['tender', tenderId, session?.user.id],
     refetchInterval: (query) => {
-      const tender = query.state.data?.tender;
-      return tender?.status === 'open' && new Date(tender.closes_at).getTime() <= Date.now() ? closingCheckMilliseconds : false;
+      const result = query.state.data;
+      if (result?.tender?.status !== 'open') return false;
+      const remaining = Date.parse(result.tender.closes_at) - tenderServerTime(result).getTime();
+      return remaining > 0 ? Math.min(maximumTimerMilliseconds, Math.ceil(remaining)) : closingCheckMilliseconds;
     },
     queryFn: async () => {
-      const [tenderResult, documentsResult, formResult] = await Promise.all([
+      const [tenderResult, documentsResult, formResult, clockResult] = await Promise.all([
         supabase.from('tenders').select('*').eq('id', tenderId).maybeSingle(),
         supabase.from('tender_documents').select('id, file_name, document_role, size_bytes').eq('tender_id', tenderId).order('file_name'),
         supabase.from('form_submissions').select('form_key, form_version, data').eq('attached_to_type', 'tender').eq('attached_to_id', tenderId).maybeSingle(),
+        supabase.rpc('server_time').then(({ data, error }) => {
+          if (error) throw error;
+          return { serverMilliseconds: Date.parse(data), observedMilliseconds: performance.now() };
+        }),
       ]);
       if (tenderResult.error) throw tenderResult.error;
       if (documentsResult.error) throw documentsResult.error;
       if (formResult.error) throw formResult.error;
-      return { tender: tenderResult.data, documents: documentsResult.data, requirementsForm: formResult.data };
+      return { ...clockResult, tender: tenderResult.data, documents: documentsResult.data, requirementsForm: formResult.data };
     },
   });
 }
@@ -44,7 +52,7 @@ export function useTender(tenderId: string) {
 export function TenderDetailsPage() {
   const tenderId = useParams().tenderId ?? '';
   const { session, supplierProfile } = useAccount();
-  const now = useNow();
+  useNow(); // Tick the displayed server time between reads.
   const tenderQuery = useTender(tenderId);
   const tender = tenderQuery.data?.tender ?? null;
   const companiesQuery = useCompanies(tender ? [tender.business_id] : [], 'business');
@@ -55,7 +63,8 @@ export function TenderDetailsPage() {
   if (!tender) return <Notice tone="error">Tender not found. It may have been removed, or it isn't published yet.</Notice>;
 
   const isOwner = tender.business_id === session?.user.id;
-  const isAcceptingBids = tenderPhase(tender, now) === 'accepting-bids';
+  const now = tenderServerTime(tenderQuery.data);
+  const isAcceptingBids = tender.status === 'open' && Date.parse(tender.closes_at) > now.getTime();
   const categoryName = categoriesQuery.data?.find((category) => category.id === tender.category_id)?.name ?? 'Uncategorised';
   const requirementsForm = tenderQuery.data.requirementsForm;
   return (

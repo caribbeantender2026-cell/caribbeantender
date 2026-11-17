@@ -66,3 +66,11 @@ test('A very long answer wraps onto more pages, and a word longer than a line is
 test('Accents typed as a letter plus a combining mark (as pasted from some Mac and PDF sources) keep their letter', () => {
   assert.equal(pdfSafeText('Re\u0301sume\u0301'), 'Résumé');
 });
+
+test('Retired form answers appear in the PDF even without a readable schema', async () => {
+  const pdf = await formToPdf('Historical proposal', { fields: [] }, { scope: 'Supply timber', costs: [{ quantity: 7 }] });
+  const text = drawnText(pdf);
+  assert.match(text, /Supply timber/);
+  assert.match(text, /quantity/);
+  assert.match(text, /7/);
+});

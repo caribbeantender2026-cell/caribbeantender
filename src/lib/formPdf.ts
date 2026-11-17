@@ -99,5 +99,12 @@ export async function formToPdf(title: string, schema: FormSchema, data: FormDat
       write(`${field.grandTotal.label}: ${displayValue(grandTotal(rows, field.lineTotal))}`, bold, bodySizePoints);
     }
   }
+  const knownFields = new Set(schema.fields.map((field) => field.name));
+  for (const [name, answer] of Object.entries(data)) {
+    if (knownFields.has(name)) continue;
+    cursor -= fieldGapPoints;
+    write(name, bold, bodySizePoints);
+    write(typeof answer === 'object' ? JSON.stringify(answer) : displayValue(answer), regular, bodySizePoints);
+  }
   return document.save();
 }

@@ -276,7 +276,7 @@ describe(`RLS suite (${supabaseUrl})`, () => {
     assert.deepEqual((documents ?? []).map((row) => row.document_role), ['requirements_form']);
     const documentId = documents?.[0]?.id as string;
     assert.equal((await downloadAs(supplier, documentId)).text, 'requirements');
-    assert.deepEqual(await auditActions(documentId), ['document_download_url_issued']);
+    assert.deepEqual(await auditActions(documentId), ['document_download_authorized', 'document_download_url_issued']);
     const visitorSigned = await anonymousClient().storage.from('tender-documents').createSignedUrl(`${draft.id}/requirements-form/requirements.pdf`, 60);
     assert.ok(visitorSigned.error, 'visitor');
   });

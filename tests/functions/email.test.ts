@@ -30,7 +30,7 @@ function fakeServices(): EmailServices & { log: Map<string, string>; delivered: 
       log.set(key(email), status);
       return true;
     },
-    finishLogRow: async (email: OutgoingEmail, status: 'sent' | 'failed') => {
+    finishLogRow: async (email: OutgoingEmail, status: 'sent' | 'failed' | 'suppressed') => {
       log.set(key(email), status);
     },
     deliver: async (email: OutgoingEmail) => {
@@ -133,4 +133,15 @@ test("Resend's idempotency key is the same for the same email and differs for an
   assert.notEqual(first, await idempotencyKey(emailTo('other@caribbeantender.com')));
   assert.notEqual(first, await idempotencyKey({ ...emailTo(allowedAddress), type: 'deadline_reminder' }));
   assert.ok(first.length <= 256, 'Resend accepts keys up to 256 characters');
+});
+
+test('Removing a recipient from the allowlist retires a previously failed receipt', async () => {
+  const services = fakeServices();
+  const email: OutgoingEmail = { ...emailTo(allowedAddress), type: 'bid_receipt' };
+  const key = [email.type, email.recipient, email.entityId].join('|');
+  services.log.set(key, 'failed');
+  services.isRetryDue = true;
+  assert.equal(await sendEmail(email, () => false, services), 'suppressed');
+  assert.equal(services.log.get(key), 'suppressed');
+  assert.deepEqual(services.delivered, []);
 });

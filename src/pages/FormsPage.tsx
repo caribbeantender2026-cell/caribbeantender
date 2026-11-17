@@ -7,7 +7,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { FileTextIcon } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../auth/AccountContext.tsx';
-import { FormFields, PdfButton, useFormDefinition } from '../components/FormFields.tsx';
+import { FormAnswers, FormFields, PdfButton, useFormDefinition } from '../components/FormFields.tsx';
 import { ErrorNotice, Loading, Notice } from '../components/Notices.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
 import { Button } from '../components/ui/button.tsx';
@@ -153,10 +153,19 @@ export function FormFillPage() {
   if (definitionQuery.isError) return <ErrorNotice error={definitionQuery.error} />;
   if (existingQuery.isError) return <ErrorNotice error={existingQuery.error} />;
   const definition = definitionQuery.data;
-  if (!definition) return <Notice tone="error">This form isn't available.</Notice>;
   const existing = existingQuery.data;
-  const current: FormData = data ?? ((existing?.data ?? {}) as FormData);
+  if (!definition) {
+    if (!existing) return <Notice tone="error">This form isn't available.</Notice>;
+    const savedAnswers = existing.data as FormData;
+    return <>
+      <PageHeader title={formKey} description="Saved answers from a retired form." back={{ to: '/forms', label: 'All forms' }} />
+      <FormAnswers schema={{ fields: [] }} data={savedAnswers} />
+      <PdfButton title={formKey} schema={{ fields: [] }} data={savedAnswers} fileName={`${formKey}.pdf`} />
+    </>;
+  }
   const isLocked = existing?.attached_to_type === 'bid' || existing?.isOnPublishedTender === true;
+
+  const current: FormData = data ?? ((existing?.data ?? {}) as FormData);
 
   async function save() {
     setOutcome(null);
@@ -216,7 +225,9 @@ export function FormFillPage() {
           >
             {/* Only here to lock every field at once; min-w-0 stops a wide table stretching it past the card instead of scrolling. */}
             <fieldset disabled={isLocked} className="min-w-0">
-              <FormFields schema={definition.parsedSchema} data={current} onChange={setData} />
+              {isLocked
+                ? <FormAnswers schema={definition.parsedSchema} data={current} />
+                : <FormFields schema={definition.parsedSchema} data={current} onChange={setData} />}
             </fieldset>
             {problems.length > 0 && (
               <Notice tone="error">

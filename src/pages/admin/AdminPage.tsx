@@ -105,14 +105,26 @@ function MultiFactorGate({ onVerified }: { onVerified: () => void }) {
   );
 }
 
+function PageButtons({ page, hasNext, onPage }: { page: number; hasNext: boolean; onPage: (value: number) => void }) {
+  if (!hasNext && page === 0) return null;
+  return (
+    <nav aria-label="Result pages" className="flex items-center gap-3">
+      <Button variant="outline" disabled={page === 0} onClick={() => onPage(page - 1)}>Previous</Button>
+      <span>Page {page + 1}</span>
+      <Button variant="outline" disabled={!hasNext} onClick={() => onPage(page + 1)}>Next</Button>
+    </nav>
+  );
+}
+
 function Users() {
+  const [page, setPage] = useState(0);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const usersQuery = useQuery({
-    queryKey: ['admin-users', search],
+    queryKey: ['admin-users', search, page],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('admin_list_users', { search: search.trim(), page_size: rowsPerPage, page_offset: 0 });
+      const { data, error } = await supabase.rpc('admin_list_users', { search: search.trim(), page_size: rowsPerPage + 1, page_offset: page * rowsPerPage });
       if (error) throw error;
       return data;
     },
@@ -145,7 +157,7 @@ function Users() {
       </CardHeader>
       <CardContent className="grid gap-4">
         <Field label="Search by name, email or company" htmlFor="userSearch" className="max-w-sm">
-          <Input id="userSearch" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <Input id="userSearch" value={search} onChange={(event) => { setPage(0); setSearch(event.target.value); }} />
         </Field>
         {problem && <Notice tone="error">{problem}</Notice>}
         {usersQuery.isPending && <Loading />}
@@ -163,16 +175,16 @@ function Users() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usersQuery.data.map((user) => (
+              {usersQuery.data.slice(0, rowsPerPage).map((user) => (
                 <TableRow key={user.user_id}>
                   <TableCell>{user.full_name}{user.staff_role && <> <Badge variant="secondary">{user.staff_role}</Badge></>}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{[user.business_name && `Business: ${user.business_name}`, user.supplier_name && `Supplier: ${user.supplier_name}`].filter(Boolean).join('; ') || '—'}</TableCell>
                   <TableCell>{user.trial_ends_at ? formatJamaicaDateTime(user.trial_ends_at) : '—'}{user.subscription_status ? ` (${user.subscription_status})` : ''}</TableCell>
-                  <TableCell>{user.is_active ? 'Active' : 'Deactivated'}</TableCell>
+                  <TableCell>{user.auth_sync_pending ? 'Sign-in change pending' : user.is_active ? 'Active' : 'Deactivated'}</TableCell>
                   <TableCell>
-                    <Button type="button" variant="outline" onClick={() => void setActive(user.user_id, !user.is_active, user.full_name)}>
-                      {user.is_active ? 'Deactivate' : 'Reactivate'}
+                    <Button type="button" variant="outline" onClick={() => void setActive(user.user_id, user.auth_sync_pending ? user.is_active : !user.is_active, user.full_name)}>
+                      {user.auth_sync_pending ? (user.is_active ? 'Retry reactivation' : 'Retry deactivation') : (user.is_active ? 'Deactivate' : 'Reactivate')}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -180,22 +192,24 @@ function Users() {
             </TableBody>
           </Table>
         )}
+        {usersQuery.data && <PageButtons page={page} hasNext={usersQuery.data.length > rowsPerPage} onPage={setPage} />}
       </CardContent>
     </Card>
   );
 }
 
 function Tenders() {
+  const [page, setPage] = useState(0);
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<Enums<'tender_status'> | ''>('');
   const [problem, setProblem] = useState<string | null>(null);
   const [confirmation, askToConfirm] = useConfirmation();
   const tendersQuery = useQuery({
-    queryKey: ['admin-tenders', statusFilter],
+    queryKey: ['admin-tenders', statusFilter, page],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('admin_list_tenders', {
-        page_size: rowsPerPage,
-        page_offset: 0,
+        page_size: rowsPerPage + 1,
+        page_offset: page * rowsPerPage,
         ...(statusFilter ? { status_filter: statusFilter } : {}),
       });
       if (error) throw error;
@@ -227,7 +241,7 @@ function Tenders() {
       </CardHeader>
       <CardContent className="grid gap-4">
         <Field label="Status" htmlFor="adminTenderStatus" className="max-w-sm">
-          <NativeSelect id="adminTenderStatus" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'tender_status'> | '')}>
+          <NativeSelect id="adminTenderStatus" value={statusFilter} onChange={(event) => { setPage(0); setStatusFilter(event.target.value as Enums<'tender_status'> | ''); }}>
             <option value="">All published</option>
             {(['open', 'closed', 'awarded', 'cancelled'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
           </NativeSelect>
@@ -249,7 +263,7 @@ function Tenders() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tendersQuery.data.map((tender) => {
+              {tendersQuery.data.slice(0, rowsPerPage).map((tender) => {
                 const phase = tenderPhase(tender);
                 return (
                   <TableRow key={tender.tender_id}>
@@ -271,6 +285,7 @@ function Tenders() {
             </TableBody>
           </Table>
         )}
+        {tendersQuery.data && <PageButtons page={page} hasNext={tendersQuery.data.length > rowsPerPage} onPage={setPage} />}
       </CardContent>
     </Card>
   );

@@ -26,6 +26,9 @@ jobs:
       - run: pnpm test:database
       - run: pnpm test:database:before-after
       - run: pnpm exec vite build
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci
 
   # Publishes the site to Cloudflare Pages after every push to main whose checks all pass, so a
   # broken build or a failing test never reaches caribbeantender.com. One deploy at a time.
@@ -108,9 +111,9 @@ jobs:
             echo "PRODUCTION_SUPABASE_PUBLISHABLE_KEY=${{ secrets.PRODUCTION_SUPABASE_PUBLISHABLE_KEY }}"
             echo "PRODUCTION_SUPABASE_SECRET_KEY=${{ secrets.PRODUCTION_SUPABASE_SECRET_KEY }}"
           } > .env.production.local
-      - run: node scripts/export-project-data.ts backups/ci-before
       - name: Run the live suite
-        run: node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only backups/ci-before | tee rls-output.txt
+        shell: bash
+        run: node --env-file=.env.production.local scripts/run-rls.ts live --after-state-only | tee rls-output.txt
       # run-rls cleans up after itself, but not when the job is cancelled or times out mid-run.
       - name: Remove this run's test data, whatever happened
         if: always()
