@@ -1,4 +1,4 @@
-# Continuous integration (PRD section 11). Committed now; it runs once the repo is pushed.
+# Continuous integration and deployment (PRD section 11).
 name: CI
 
 on:
@@ -36,6 +36,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: checks
     runs-on: ubuntu-latest
+    # Records each deploy under the repo's Deployments, with a link to the live site.
+    environment:
+      name: production
+      url: https://caribbeantender.com
     concurrency:
       group: production-deploy
       cancel-in-progress: false
