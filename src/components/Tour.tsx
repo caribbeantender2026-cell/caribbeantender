@@ -92,22 +92,37 @@ export function Tour({ accountType, onClose }: { accountType: AccountType; onClo
   const [stepIndex, setStepIndex] = useState(0);
   const [demoForm, setDemoForm] = useState<FormData>({});
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const steps = accountType === 'business' ? businessSteps(demoForm, setDemoForm) : supplierSteps(demoForm, setDemoForm);
   const step = steps[stepIndex] ?? steps[0];
 
+  // A native modal dialog keeps keyboard focus inside it and makes the page behind inert.
+  useEffect(() => {
+    if (!dialogRef.current?.open) dialogRef.current?.showModal();
+  }, []);
   // Moves focus to each step's heading, so keyboard and screen-reader users follow along.
   useEffect(() => headingRef.current?.focus(), [stepIndex]);
 
   async function finish() {
-    // If recording fails (for example, a deactivated account), the tour still closes for now.
+    // The frame closes the tour whatever happens: if recording fails (for example, a deactivated
+    // account), it shows again on the next visit instead of trapping the person now.
     await supabase.rpc('record_onboarding_completed', { completed_account_type: accountType });
     onClose();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-dark/60 p-4 backdrop-blur-sm">
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="tourHeading"
+      // Escape: skip the tour, like the link.
+      onCancel={(event) => {
+        event.preventDefault();
+        void finish();
+      }}
+      className="m-auto w-[min(36rem,calc(100vw-2rem))] max-w-none overflow-visible bg-transparent p-0 backdrop:bg-navy-dark/60 backdrop:backdrop-blur-sm"
+    >
       {/* gap-0: the space differs between parts (more above the heading than below it), so each part sets its own margin. */}
-      <Card className="max-h-[90vh] w-full max-w-xl gap-0 overflow-y-auto p-6" role="dialog" aria-modal="true" aria-labelledby="tourHeading" onKeyDown={(event) => event.key === 'Escape' && void finish()}>
+      <Card className="max-h-[90vh] w-full gap-0 overflow-y-auto p-6">
         <p className="text-sm text-muted-foreground">How CaribbeanTender works for {accountType === 'business' ? 'businesses' : 'suppliers'} · step {stepIndex + 1} of {steps.length}</p>
         <h3 id="tourHeading" ref={headingRef} tabIndex={-1} className="mt-6 mb-3 text-base font-semibold text-navy-dark">{step?.title}</h3>
         <p>{step?.text}</p>
@@ -122,6 +137,6 @@ export function Tour({ accountType, onClose }: { accountType: AccountType; onClo
           <button type="button" className="cursor-pointer font-medium text-primary underline underline-offset-4" onClick={() => void finish()}>Skip the tour</button>
         </div>
       </Card>
-    </div>
+    </dialog>
   );
 }

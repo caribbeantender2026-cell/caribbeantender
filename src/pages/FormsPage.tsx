@@ -21,7 +21,9 @@ const printableLinkLifetimeSeconds = 60;
 const audienceLabels = { business: 'For businesses', supplier: 'For suppliers' } as const;
 
 export function FormsPage() {
-  const { session } = useAccount();
+  const { session, businessProfile, supplierProfile } = useAccount();
+  // Only the forms the person's own accounts may fill in; the database refuses the others.
+  const audiences = (Object.keys(audienceLabels) as (keyof typeof audienceLabels)[]).filter((audience) => (audience === 'business' ? businessProfile : supplierProfile) !== null);
   const [problem, setProblem] = useState<string | null>(null);
   const formsQuery = useQuery({
     queryKey: ['form-definitions'],
@@ -57,7 +59,7 @@ export function FormsPage() {
       {formsQuery.isPending && <Loading />}
       {formsQuery.isError && <ErrorNotice error={formsQuery.error} />}
       {problem && <Notice tone="error">{problem}</Notice>}
-      {(Object.keys(audienceLabels) as (keyof typeof audienceLabels)[]).map((audience) => {
+      {audiences.map((audience) => {
         const forms = (formsQuery.data ?? []).filter((form) => form.audience === audience);
         if (forms.length === 0) return null;
         return (
@@ -123,23 +125,29 @@ export function FormFillPage() {
   const { session } = useAccount();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const definitionQuery = useFormDefinition(formKey);
   const [data, setData] = useState<FormData | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [outcome, setOutcome] = useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const existingQuery = useQuery({
     queryKey: ['form-submission', formKey, tenderId, submissionId],
     queryFn: async () => {
-      let request = supabase.from('form_submissions').select('id, form_version, data, attached_to_type').eq('form_key', formKey).eq('owner_id', session?.user.id ?? '');
+      let request = supabase.from('form_submissions').select('id, form_version, data, attached_to_type, attached_to_id').eq('form_key', formKey).eq('owner_id', session?.user.id ?? '');
       if (submissionId) request = request.eq('id', submissionId);
       else if (tenderId) request = request.eq('attached_to_type', 'tender').eq('attached_to_id', tenderId);
       else return null;
       const { data: found, error } = await request.maybeSingle();
       if (error) throw error;
-      return found;
+      if (found?.attached_to_type !== 'tender') return found ? { ...found, isOnPublishedTender: false } : null;
+      // The database freezes a tender's form once the tender is published; lock it on screen too.
+      const tender = await supabase.from('tenders').select('status').eq('id', found.attached_to_id ?? '').maybeSingle();
+      if (tender.error) throw tender.error;
+      return { ...found, isOnPublishedTender: tender.data !== null && tender.data.status !== 'draft' };
     },
   });
+  // A saved form opens with the version it was saved under, so none of its answers are hidden.
+  const definitionQuery = useFormDefinition(formKey, existingQuery.data?.form_version);
 
   if (definitionQuery.isPending || existingQuery.isPending) return <Loading />;
   if (definitionQuery.isError) return <ErrorNotice error={definitionQuery.error} />;
@@ -148,30 +156,43 @@ export function FormFillPage() {
   if (!definition) return <Notice tone="error">This form isn't available.</Notice>;
   const existing = existingQuery.data;
   const current: FormData = data ?? ((existing?.data ?? {}) as FormData);
-  const isLocked = existing?.attached_to_type === 'bid';
+  const isLocked = existing?.attached_to_type === 'bid' || existing?.isOnPublishedTender === true;
 
   async function save() {
     setOutcome(null);
     const found = formProblems(definition?.parsedSchema ?? { fields: [] }, current, tenderId !== null);
     setProblems(found);
     if (found.length > 0) return;
-    const saved = existing
-      ? await supabase.from('form_submissions').update({ data: current as Json }).eq('id', existing.id)
-      : await supabase.from('form_submissions').insert({
-          form_key: formKey,
-          form_version: definition?.version ?? 1,
-          owner_id: session?.user.id ?? '',
-          data: current as Json,
-          ...(tenderId ? { attached_to_type: 'tender', attached_to_id: tenderId } : {}),
-        });
-    if (saved.error) return setOutcome({ tone: 'error', text: errorMessage(saved.error) });
-    await queryClient.invalidateQueries({ queryKey: ['form-submission'] });
-    await queryClient.invalidateQueries({ queryKey: ['own-forms'] });
-    if (tenderId) {
-      void navigate(`/business/tenders/${tenderId}/edit`);
-      return;
+    setIsSaving(true);
+    try {
+      const saved = existing
+        ? await supabase.from('form_submissions').update({ data: current as Json }).eq('id', existing.id).select('id').maybeSingle()
+        : await supabase
+            .from('form_submissions')
+            .insert({
+              form_key: formKey,
+              form_version: definition?.version ?? 1,
+              owner_id: session?.user.id ?? '',
+              data: current as Json,
+              ...(tenderId ? { attached_to_type: 'tender', attached_to_id: tenderId } : {}),
+            })
+            .select('id')
+            .maybeSingle();
+      if (saved.error) return setOutcome({ tone: 'error', text: errorMessage(saved.error) });
+      if (!saved.data) return setOutcome({ tone: 'error', text: "The form wasn't saved: it may have been locked or removed. Reload the page and try again." });
+      await queryClient.invalidateQueries({ queryKey: ['form-submission'] });
+      await queryClient.invalidateQueries({ queryKey: ['own-forms'] });
+      if (tenderId) {
+        await queryClient.invalidateQueries({ queryKey: ['tender', tenderId] });
+        void navigate(`/business/tenders/${tenderId}/edit`);
+        return;
+      }
+      // The address now names the saved form, so the next Save updates it instead of making a copy.
+      if (!existing) void navigate(`/forms/${formKey}?submission=${saved.data.id}`, { replace: true });
+      setOutcome({ tone: 'success', text: 'Form saved.' });
+    } finally {
+      setIsSaving(false);
     }
-    setOutcome({ tone: 'success', text: 'Form saved.' });
   }
 
   return (
@@ -182,7 +203,7 @@ export function FormFillPage() {
         back={tenderId ? { to: `/business/tenders/${tenderId}/edit`, label: 'Back to your draft' } : { to: '/forms', label: 'All forms' }}
       />
       {tenderId && <Notice>This becomes the requirements form of your draft tender. It is locked once the tender is published.</Notice>}
-      {isLocked && <Notice>This form is attached to a submitted bid and can't be changed.</Notice>}
+      {isLocked && <Notice>This form is attached to {existing?.attached_to_type === 'bid' ? 'a submitted bid' : 'a published tender'} and can't be changed.</Notice>}
       <Card className="max-w-3xl">
         <CardContent>
           <form
@@ -204,7 +225,7 @@ export function FormFillPage() {
             )}
             {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
             <div className="flex flex-wrap items-center gap-2">
-              {!isLocked && <Button type="submit">{tenderId ? 'Save and attach to the draft' : 'Save'}</Button>}
+              {!isLocked && <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving…' : tenderId ? 'Save and attach to the draft' : 'Save'}</Button>}
               <PdfButton title={definition.title} schema={definition.parsedSchema} data={current} fileName={`${formKey}.pdf`} />
               <Button asChild variant="outline">
                 <Link to={tenderId ? `/business/tenders/${tenderId}/edit` : '/forms'}>Back</Link>

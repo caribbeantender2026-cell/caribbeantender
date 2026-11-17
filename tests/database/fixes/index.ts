@@ -8,6 +8,7 @@ import { signupSuite, storagePoliciesSuite } from './05-storage-signup.ts';
 import { adminSuite, leastPrivilegeGrantsSuite, notificationsSuite } from './06-notifications-admin-grants.ts';
 import { accountPicturesSuite } from './07-account-pictures.ts';
 import { performanceAdvisorSuite } from './08-performance-advisor.ts';
+import { emailDeliverySuite } from './09-email-delivery.ts';
 
 // Migrations without a suite of their own: 040060 (profile columns, exercised by the deactivation
 // and onboarding cases), 040400 (enum values) and 040410 (document tables, exercised by the bid,
@@ -32,4 +33,5 @@ export const fixSuites: FixSuite[] = [
   clientFormsSuite,
   accountPicturesSuite,
   performanceAdvisorSuite,
+  emailDeliverySuite,
 ];

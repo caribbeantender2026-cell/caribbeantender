@@ -39,6 +39,10 @@ export function TendersPage() {
   }
 
   const now = new Date();
+  const timeLeft = (closesAt: string) => {
+    const left = formatTimeLeft(closesAt, now);
+    return left ? `${left} left` : 'Closing now';
+  };
   const businessName = (businessId: string) => companiesQuery.data?.get(businessId)?.companyName ?? 'Business';
   const businessPicture = (businessId: string) => <AccountPicture picturePath={companiesQuery.data?.get(businessId)?.picturePath} className="size-6 rounded-md" />;
   const categoryName = (id: number | null) => (id !== null ? (categoryNames.get(id) ?? 'Uncategorised') : 'Uncategorised');
@@ -58,14 +62,24 @@ export function TendersPage() {
         }
       />
       {tendersQuery.isPending && <Loading />}
-      {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
-      {tendersQuery.data && tenders.length === 0 && (
+      {/* A later page can stop existing as tenders close (an old link, or the list shrinking); offer the first page. */}
+      {page > 0 && (tendersQuery.isError || tenders.length === 0) && !tendersQuery.isPending ? (
         <Card className="items-center py-14 text-center">
-          <SearchXIcon className="size-8 text-muted-foreground" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">
-            No open tenders{categoryId !== null ? ' in this category right now. Try All categories.' : ' right now. New tenders appear here as soon as they are published.'}
-          </p>
+          <p className="text-sm text-muted-foreground">This page of tenders no longer exists.</p>
+          <Button variant="outline" size="sm" type="button" onClick={() => show(categoryId, 0)}>Go to the first page</Button>
         </Card>
+      ) : (
+        <>
+          {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
+          {tendersQuery.data && tenders.length === 0 && (
+            <Card className="items-center py-14 text-center">
+              <SearchXIcon className="size-8 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">
+                No open tenders{categoryId !== null ? ' in this category right now. Try All categories.' : ' right now. New tenders appear here as soon as they are published.'}
+              </p>
+            </Card>
+          )}
+        </>
       )}
       {tenders.length > 0 && (
         <Card className="gap-0 overflow-hidden py-0">
@@ -80,7 +94,7 @@ export function TendersPage() {
                 </p>
                 <p className="mt-2 flex items-center gap-1.5 text-sm tabular-nums">
                   <Clock3Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                  {formatTimeLeft(tender.closes_at, now) ?? 'Closing'} left
+                  {timeLeft(tender.closes_at)}
                 </p>
               </li>
             ))}
@@ -112,7 +126,7 @@ export function TendersPage() {
                     <TableCell><Badge variant="outline" className="font-normal">{categoryName(tender.category_id)}</Badge></TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">
                       {formatJamaicaDateTime(tender.closes_at)}
-                      <span className="block text-xs text-muted-foreground">{formatTimeLeft(tender.closes_at, now) ?? 'Closing'} left</span>
+                      <span className="block text-xs text-muted-foreground">{timeLeft(tender.closes_at)}</span>
                     </TableCell>
                     <TableCell className="pr-5"><Badge variant="open">Open</Badge></TableCell>
                   </TableRow>

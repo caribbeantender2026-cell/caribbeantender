@@ -4,7 +4,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { createAccount, loadAccounts, useAccount, type AccountType } from '../../auth/AccountContext.tsx';
+import { useQueryClient } from '@tanstack/react-query';
+import { createAccount, loadAccounts, type AccountType } from '../../auth/AccountContext.tsx';
 import { Notice } from '../../components/Notices.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader } from '../../components/ui/card.tsx';
@@ -21,7 +22,7 @@ type LoginValues = z.infer<typeof loginSchema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParameters] = useSearchParams();
-  const { refreshAccounts } = useAccount();
+  const queryClient = useQueryClient();
   const [problem, setProblem] = useState<string | null>(null);
   const [needsChoice, setNeedsChoice] = useState(false);
   const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
@@ -42,13 +43,13 @@ export function LoginPage() {
         await createAccount(registeredType as AccountType, data.session);
         accounts = await loadAccounts(data.user.id);
       }
-      await refreshAccounts();
-      if (!accounts.businessProfile && !accounts.supplierProfile) {
-        setProblem('You are logged in, but this email has no Business or Supplier account. Register one to continue.');
-        return;
-      }
+      // Cached under the new user's id: the provider's refresh function still belongs to the signed-out visitor.
+      queryClient.setQueryData(['accounts', data.user.id], accounts);
       if (nextPath) {
+        // Staff without a business or supplier account still reach /admin this way.
         void navigate(nextPath);
+      } else if (!accounts.businessProfile && !accounts.supplierProfile) {
+        setProblem('You are logged in, but this email has no Business or Supplier account yet. Add one from the menu under your name, top right.');
       } else if (accounts.businessProfile && accounts.supplierProfile) {
         setNeedsChoice(true);
       } else {

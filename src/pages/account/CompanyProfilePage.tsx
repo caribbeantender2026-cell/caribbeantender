@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { useAccount, type AccountType } from '../../auth/AccountContext.tsx';
 import { AccountPicture, accountPicturesBucket } from '../../components/AccountPicture.tsx';
 import { CategoryOptions } from '../../components/CategoryOptions.tsx';
-import { Notice } from '../../components/Notices.tsx';
+import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardHeader } from '../../components/ui/card.tsx';
@@ -22,6 +22,10 @@ const maximumDescriptionLength = 2000;
 // Account pictures show at 64 pixels at most; 256 stays sharp on high-density screens.
 const maximumPictureSidePixels = 256;
 const pictureQuality = 0.85;
+// ponytail: a file-size cap only; a small file can still unpack to a huge image. Decode with
+// createImageBitmap's resize options first if phones ever run out of memory here.
+const maximumPictureFileMegabytes = 20;
+const maximumPictureFileBytes = maximumPictureFileMegabytes * 1024 * 1024;
 // Every upload gets a new file name, so a cached picture never goes stale.
 const oneYearSeconds = String(365 * 24 * 60 * 60);
 
@@ -103,10 +107,17 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
           </Field>
           {accountType === 'supplier' && (
             <Field label="Category (new tender alerts follow it)" htmlFor="categoryId" error={errors.categoryId?.message}>
-              <NativeSelect id="categoryId" {...form.register('categoryId')}>
-                <option value="">Select category</option>
-                <CategoryOptions categories={categoriesQuery.data ?? []} />
-              </NativeSelect>
+              {/* Mounted once the options exist, or the saved category shows as "Select category". */}
+              {categoriesQuery.isPending ? (
+                <Loading />
+              ) : categoriesQuery.isError ? (
+                <ErrorNotice error={categoriesQuery.error} />
+              ) : (
+                <NativeSelect id="categoryId" {...form.register('categoryId')}>
+                  <option value="">Select category</option>
+                  <CategoryOptions categories={categoriesQuery.data} />
+                </NativeSelect>
+              )}
             </Field>
           )}
           <Field label="Contact Number" htmlFor="phone" error={errors.phone?.message}>
@@ -135,6 +146,8 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
  * also drops photo metadata such as GPS location. WebP where the browser can encode it, PNG otherwise.
  */
 async function shrinkPicture(file: File): Promise<Blob> {
+  // Opening a huge photo at full size can crash the tab on a phone.
+  if (file.size > maximumPictureFileBytes) throw new Error(`"${file.name}" is larger than ${maximumPictureFileMegabytes} MB. Choose a smaller picture.`);
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);
@@ -243,6 +256,7 @@ function AccountPictureSetting({ accountType, userId, picturePath }: { accountTy
 /** Lets a supplier turn new-tender emails off and on (PRD P1-13). No row means alerts are on. */
 function TenderAlertsSetting({ userId }: { userId: string }) {
   const [problem, setProblem] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const preferenceQuery = useQuery({
     queryKey: ['notification-preferences', userId],
     queryFn: async () => {
@@ -254,15 +268,22 @@ function TenderAlertsSetting({ userId }: { userId: string }) {
 
   async function change(tenderAlerts: boolean) {
     setProblem(null);
-    // Update or insert, not upsert: users may not update user_id, which an upsert writes.
-    const { error } = preferenceQuery.data
-      ? await supabase.from('notification_preferences').update({ tender_alerts: tenderAlerts }).eq('user_id', userId)
-      : await supabase.from('notification_preferences').insert({ user_id: userId, tender_alerts: tenderAlerts });
-    if (error) setProblem(errorMessage(error));
-    await preferenceQuery.refetch();
+    setIsSaving(true);
+    try {
+      // Update or insert, not upsert: users may not update user_id, which an upsert writes.
+      const { error } = preferenceQuery.data
+        ? await supabase.from('notification_preferences').update({ tender_alerts: tenderAlerts }).eq('user_id', userId)
+        : await supabase.from('notification_preferences').insert({ user_id: userId, tender_alerts: tenderAlerts });
+      if (error) setProblem(errorMessage(error));
+      await preferenceQuery.refetch();
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   if (preferenceQuery.isPending) return null;
+  // Without the saved setting the box can't say whether alerts are on, and a click could insert twice.
+  if (preferenceQuery.isError) return <ErrorNotice error={preferenceQuery.error} />;
   const tenderAlerts = preferenceQuery.data?.tender_alerts ?? true;
   return (
     <Card className="mb-6 max-w-3xl">
@@ -270,7 +291,7 @@ function TenderAlertsSetting({ userId }: { userId: string }) {
         <h3 className="text-base font-semibold text-navy-dark">Email settings</h3>
       </CardHeader>
       <CardContent>
-        <Choice id="tenderAlerts" type="checkbox" checked={tenderAlerts} onChange={(event) => void change(event.target.checked)}>
+        <Choice id="tenderAlerts" type="checkbox" checked={tenderAlerts} disabled={isSaving} onChange={(event) => void change(event.target.checked)}>
           Email me when a new tender is published in my category
         </Choice>
         {problem && <Notice tone="error">{problem}</Notice>}

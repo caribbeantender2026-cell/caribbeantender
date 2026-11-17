@@ -15,6 +15,14 @@ import './styles/app.css';
 
 const cacheLifetimeMilliseconds = 30_000;
 
+// One address for the site: sign-ins are kept per address, and every email links to the bare domain.
+// ponytail: done here because Cloudflare Pages' _redirects can't redirect between domains; a Cloudflare
+// redirect rule would skip loading the page first.
+const bareDomain = 'caribbeantender.com';
+if (window.location.hostname === `www.${bareDomain}`) {
+  window.location.replace(`https://${bareDomain}${window.location.pathname}${window.location.search}${window.location.hash}`);
+}
+
 // Emails already sent by the old site link to its .html pages; the reset link's token must survive.
 const legacyPaths: Record<string, string> = {
   '/index.html': '/',

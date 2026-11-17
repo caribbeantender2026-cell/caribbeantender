@@ -15,17 +15,19 @@ import { PageHeader } from '../../components/PageHeader.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader } from '../../components/ui/card.tsx';
 import { Field, Input, NativeSelect, Textarea } from '../../components/ui/fields.tsx';
-import { acceptedDocumentDescription, acceptedDocumentExtensions, checkDocument, tenderDocumentPath } from '../../lib/documents.ts';
+import { acceptedDocumentDescription, acceptedDocumentExtensions, checkDocument, draftUploadRule, tenderDocumentPath, uploadProblem } from '../../lib/documents.ts';
 import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 import { jamaicaLocalToUtc, utcToJamaicaLocal } from '../../lib/time.ts';
 
+// The same limits as the tenders table's checks.
+const minimumTitleLength = 3;
 const maximumTitleLength = 200;
 const maximumDescriptionLength = 20_000;
 const requirementsFolder = 'requirements-form';
 
 const tenderSchema = z.object({
-  title: z.string().trim().min(1, 'Enter a title.').max(maximumTitleLength, `Use at most ${maximumTitleLength} characters.`),
+  title: z.string().trim().min(minimumTitleLength, `Use at least ${minimumTitleLength} characters.`).max(maximumTitleLength, `Use at most ${maximumTitleLength} characters.`),
   description: z.string().trim().min(1, 'Describe what you need.').max(maximumDescriptionLength, `Use at most ${maximumDescriptionLength} characters.`),
   categoryId: z.string().min(1, 'Choose a category.'),
   closesAtLocal: z
@@ -60,7 +62,8 @@ function useDraftFiles(tenderId: string) {
 /** Whether the draft has its requirements form filled in online, with a link to fill it in or edit it. */
 function OnlineRequirementsForm({ tenderId }: { tenderId: string }) {
   const attachedQuery = useQuery({
-    queryKey: ['form-submission', 'business-requirements', tenderId, null],
+    // Not the form page's key: that one caches the whole form, this only whether one exists.
+    queryKey: ['form-submission', 'attached-to-tender', tenderId],
     queryFn: async () => {
       const { data, error } = await supabase.from('form_submissions').select('id').eq('attached_to_type', 'tender').eq('attached_to_id', tenderId).maybeSingle();
       if (error) throw error;
@@ -83,18 +86,21 @@ function DraftFiles({ tenderId }: { tenderId: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  async function upload(files: FileList | null, isRequirementsForm: boolean) {
+  async function upload(input: HTMLInputElement, isRequirementsForm: boolean) {
     setProblem(null);
-    if (!files) return;
+    // Copied before the box is cleared, so choosing the same file again after a failure or a removal works.
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (files.length === 0) return;
     setIsBusy(true);
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         const checked = checkDocument(file);
         if ('problem' in checked) throw new Error(checked.problem);
         const { error } = await supabase.storage
           .from('tender-documents')
           .upload(tenderDocumentPath(tenderId, file.name, isRequirementsForm), file, { contentType: checked.contentType });
-        if (error) throw new Error(`"${file.name}" was not uploaded: ${error.message}`);
+        if (error) throw new Error(uploadProblem(file.name, error, draftUploadRule));
       }
     } catch (error) {
       setProblem(errorMessage(error));
@@ -145,14 +151,14 @@ function DraftFiles({ tenderId }: { tenderId: string }) {
           <OnlineRequirementsForm tenderId={tenderId} />
           {filesQuery.data && fileRows(filesQuery.data.requirements)}
           <Field label="Upload the completed requirements form" htmlFor="requirementsUpload">
-            <Input id="requirementsUpload" type="file" accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target.files, true)} />
+            <Input id="requirementsUpload" type="file" accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target, true)} />
           </Field>
         </div>
         <div className="grid gap-3">
           <h4 className="font-semibold">Supporting documents</h4>
           {filesQuery.data && fileRows(filesQuery.data.supporting)}
           <Field label="Add supporting documents" htmlFor="supportingUpload">
-            <Input id="supportingUpload" type="file" multiple accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target.files, false)} />
+            <Input id="supportingUpload" type="file" multiple accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target, false)} />
           </Field>
         </div>
         {isBusy && <p className="text-sm text-muted-foreground">Uploading…</p>}
@@ -200,18 +206,24 @@ export function TenderFormPage() {
     if (isNew) {
       const { data, error } = await supabase.from('tenders').insert({ ...fields, business_id: session?.user.id ?? '' }).select('id').single();
       if (error) return setProblem(errorMessage(error));
+      await queryClient.invalidateQueries({ queryKey: ['own-tenders'] });
       // Files go into the draft's own folder, so they can be added once it exists.
       void navigate(`/business/tenders/${data.id}/edit`, { replace: true });
       return;
     }
-    const { error } = await supabase.from('tenders').update(fields).eq('id', tenderId);
+    // Only drafts can be changed; a tender published meanwhile (in another tab) matches no row.
+    const { data: updated, error } = await supabase.from('tenders').update(fields).eq('id', tenderId).select('id');
     if (error) return setProblem(errorMessage(error));
     await queryClient.invalidateQueries({ queryKey: ['tender', tenderId] });
+    await queryClient.invalidateQueries({ queryKey: ['own-tenders'] });
+    if (updated.length === 0) return setProblem('Nothing was saved: this tender is no longer a draft. Open the tender to see where it stands.');
     void navigate(`/business/tenders/${tenderId}`);
   }
 
-  if (!isNew && draftQuery.isPending) return <Loading />;
+  // The category list must be there before the form, or a saved category shows as "Choose a category".
+  if ((!isNew && draftQuery.isPending) || categoriesQuery.isPending) return <Loading />;
   if (draftQuery.isError) return <ErrorNotice error={draftQuery.error} />;
+  if (categoriesQuery.isError) return <ErrorNotice error={categoriesQuery.error} />;
   if (!isNew && (!draft || draft.status !== 'draft')) {
     return <Notice tone="error">Only drafts can be edited. <Link to={`/business/tenders/${tenderId}`}>Go to the tender</Link>.</Notice>;
   }
@@ -236,7 +248,7 @@ export function TenderFormPage() {
             <Field label="Category" htmlFor="tenderCategory" error={errors.categoryId?.message}>
               <NativeSelect id="tenderCategory" {...form.register('categoryId')}>
                 <option value="">Choose a category</option>
-                <CategoryOptions categories={categoriesQuery.data ?? []} />
+                <CategoryOptions categories={categoriesQuery.data} />
               </NativeSelect>
             </Field>
             <Field label="Description" htmlFor="tenderDescription" error={errors.description?.message}>

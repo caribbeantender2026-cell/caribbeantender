@@ -171,16 +171,22 @@ if (target === 'live') {
   // Before cleanup removes them: every email the run caused, by status. Until go-live each must be
   // suppressed (OPEN_QUESTIONS.md, D3), including alerts to real suppliers about test tenders.
   const runAccounts = `select id from auth.users where email like 'rls-test-${runIdentifier}-%'`;
-  const emailsByStatus = query(
-    connection,
+  // Not query(): if this check can't run, the run must fail rather than report "none sent".
+  const emailsByStatus = supabase([
+    'db',
+    'query',
+    connection.locationFlag,
+    '--output',
+    'csv',
     `select log.type, log.status, count(*) as emails from public.email_log log
      where log.recipient like 'rls-test-${runIdentifier}-%'
         or log.entity_id in (select tender.id from public.tenders tender where tender.business_id in (${runAccounts}))
         or log.entity_id in (select bid.id from public.bids bid where bid.supplier_id in (${runAccounts}))
      group by 1, 2 order by 1, 2`,
-  );
+  ]).trim();
   const senderCalls = query(connection, `select status_code, count(*) as calls from net._http_response where created > now() - interval '10 minutes' group by 1 order by 1`);
-  const anyEmailSent = /,sent,/.test(emailsByStatus);
+  // A pending email may already be with Resend, so it counts as sent here.
+  const anyEmailSent = /,(sent|pending),/.test(emailsByStatus);
   if (anyEmailSent) process.exitCode = 1;
   const fence = '```';
   const emailSection = `

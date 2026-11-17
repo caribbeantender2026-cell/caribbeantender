@@ -37,5 +37,9 @@ export function queryLinked<Row = Record<string, unknown>>(sql: string): Row[] {
   }
   // Upgrade notices go to stderr; the JSON is the whole of stdout.
   const parsed = JSON.parse(result.standardOutput) as { rows?: Row[] };
-  return parsed.rows ?? [];
+  // A changed answer shape must fail loudly: reading it as "no rows" would make the cleanup skip everything.
+  if (!Array.isArray(parsed.rows)) {
+    throw new Error(`The Supabase CLI answered without a list of rows; check its version. Answer: ${result.standardOutput.slice(0, 500)}`);
+  }
+  return parsed.rows;
 }

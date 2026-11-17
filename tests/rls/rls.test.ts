@@ -231,8 +231,10 @@ describe(`RLS suite (${supabaseUrl})`, () => {
     await expiredSupplier.client.from('supplier_profiles').insert({ user_id: expiredSupplier.userId, company_name: 'Fresh Start' });
     const subscription = await adminClient.from('subscriptions').select('trial_ends_at').eq('supplier_id', expiredSupplier.userId).single();
     assert.ok(new Date(subscription.data?.trial_ends_at as string).getTime() < Date.now(), 'still expired');
-    const writes = await expiredSupplier.client.from('subscriptions').update({ status: 'active' }).eq('supplier_id', expiredSupplier.userId);
-    assert.ok(writes.error || writes.count === null);
+    await expiredSupplier.client.from('subscriptions').update({ status: 'active' }).eq('supplier_id', expiredSupplier.userId);
+    // Read back with the secret key: a refused write leaves the row as it was, with or without an error.
+    const afterWrite = await adminClient.from('subscriptions').select('status').eq('supplier_id', expiredSupplier.userId).single();
+    assert.notEqual(afterWrite.data?.status, 'active', 'a supplier cannot make its own subscription active');
   });
 
   test('A7/Q23: a one-letter name signs up; a 121-character name is refused, not shortened', async () => {

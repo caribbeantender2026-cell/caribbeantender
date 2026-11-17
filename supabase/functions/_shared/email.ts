@@ -14,45 +14,69 @@ export type EmailOutcome = 'sent' | 'suppressed' | 'already_handled' | 'failed';
 export type EmailServices = {
   /** Inserts the email_log row (unique per type, recipient and entity); false if it already exists. */
   claimLogRow: (email: OutgoingEmail, status: 'pending' | 'suppressed') => Promise<boolean>;
+  /** Takes back an existing row whose retry is due (public.reclaim_email); false if none, or another run got it. */
+  reclaimLogRow: (email: OutgoingEmail) => Promise<boolean>;
   /** Records how a pending email ended. */
   finishLogRow: (email: OutgoingEmail, status: 'sent' | 'failed', providerMessageId: string | null) => Promise<void>;
-  /** Hands the email to Resend and returns its message id. */
+  /** Hands the email to Resend, with idempotencyKey(email), and returns its message id. */
   deliver: (email: OutgoingEmail) => Promise<string>;
 };
+
+// RFC 2606 and 6761 reserve these names for testing; mail to them only bounces, and bounces hurt the
+// sending domain's reputation. The live test suites' accounts use example.com.
+const reservedTestDomain = /(^|\.)(example\.(com|net|org)|test|example|invalid|localhost)$/;
 
 /**
  * Reads EMAIL_ALLOWLIST: comma-separated addresses that may receive email, or "*" for everyone (set at
  * go-live). Unset or empty allows nobody, so a function deployed before its setting, or a setting
- * deleted by mistake, can never email a real user.
+ * deleted by mistake, can never email a real user. Reserved test domains are never allowed.
  */
 export function parseAllowlist(setting: string | undefined): (recipient: string) => boolean {
   const entries = (setting ?? '')
     .split(',')
     .map((entry) => entry.trim().toLowerCase())
     .filter((entry) => entry.length > 0);
-  if (entries.includes('*')) {
-    return () => true;
-  }
+  const allowsEveryone = entries.includes('*');
   const allowed = new Set(entries);
-  // Whole-address match only: no substrings, so "tester@example.com.attacker.net" is not "tester@example.com".
-  return (recipient) => allowed.has(recipient.trim().toLowerCase());
+  return (recipient) => {
+    const address = recipient.trim().toLowerCase();
+    if (reservedTestDomain.test(address.split('@').pop() ?? '')) return false;
+    // Whole-address match only: no substrings, so "tester@example.com.attacker.net" is not "tester@example.com".
+    return allowsEveryone || allowed.has(address);
+  };
 }
 
-/** Sends one email unless it was handled before; an address outside the allowlist is logged as suppressed instead. */
+/**
+ * The key Resend uses to send an email at most once in 24 hours, even when a retry repeats a send whose
+ * answer was lost. Hashed, because Resend allows 256 characters and an address alone may have 320.
+ */
+export async function idempotencyKey(email: OutgoingEmail): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${email.type}\n${email.entityId}\n${email.recipient.toLowerCase()}`));
+  return `email-log/${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Sends one email unless it was handled before; an address outside the allowlist is logged as suppressed
+ * instead. A failed email stays in email_log as failed, and public.due_emails offers it again once its
+ * retry is due (migration 20261117030000).
+ */
 export async function sendEmail(email: OutgoingEmail, isAllowed: (recipient: string) => boolean, services: EmailServices): Promise<EmailOutcome> {
   if (!isAllowed(email.recipient)) {
     return (await services.claimLogRow(email, 'suppressed')) ? 'suppressed' : 'already_handled';
   }
-  if (!(await services.claimLogRow(email, 'pending'))) {
+  const isClaimed = (await services.claimLogRow(email, 'pending')) || (await services.reclaimLogRow(email));
+  if (!isClaimed) {
     return 'already_handled';
   }
+  let providerMessageId: string;
   try {
-    const providerMessageId = await services.deliver(email);
-    await services.finishLogRow(email, 'sent', providerMessageId);
-    return 'sent';
+    providerMessageId = await services.deliver(email);
   } catch {
-    // The row stays claimed, so a retry can't send twice; Stage 2 decides whether failed emails are retried.
     await services.finishLogRow(email, 'failed', null);
     return 'failed';
   }
+  // Outside the try: Resend has the email, so a database error here must not record it as failed. If
+  // this throws, the row stays pending and is retried later, which the idempotency key makes harmless.
+  await services.finishLogRow(email, 'sent', providerMessageId);
+  return 'sent';
 }

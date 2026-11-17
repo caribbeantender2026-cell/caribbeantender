@@ -27,6 +27,15 @@ function text(details: Record<string, unknown>, key: string): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
+/**
+ * An amount as the app's receipt shows it ("$1,500.50"), with the currency code, since "$" alone is
+ * ambiguous. Every bid is in JMD (the bids_currency_is_jmd check).
+ */
+function amount(details: Record<string, unknown>): string {
+  const value = Number(details.amount);
+  return Number.isFinite(value) ? `${new Intl.NumberFormat('en-JM', { style: 'currency', currency: 'JMD' }).format(value)} (JMD)` : '';
+}
+
 function when(details: Record<string, unknown>, key: string): string {
   const moment = new Date(text(details, key));
   return Number.isNaN(moment.getTime()) ? '' : `${jamaicaTime.format(moment)} Jamaica time`;
@@ -61,17 +70,17 @@ export type BrandedEmailContent = {
 export function brandedEmail({ siteUrl, preview, heading, bodyHtml, button, footnoteHtml }: BrandedEmailContent): string {
   const site = siteUrl.replace(/\/+$/, '');
   const buttonHtml = button
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 8px;"><tr><td style="border-radius:10px;background:${brandColours.gold};"><a href="${escapeHtml(button.url)}" style="display:inline-block;padding:12px 22px;font-family:${bodyFont};font-size:15px;font-weight:bold;color:${brandColours.navy};text-decoration:none;border-radius:10px;">${escapeHtml(button.label)}</a></td></tr></table>`
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 8px;"><tr><td style="border-radius:10px;background:${brandColours.gold};padding:12px 22px;"><a href="${escapeHtml(button.url)}" style="display:inline-block;font-family:${bodyFont};font-size:15px;font-weight:bold;color:${brandColours.navy};text-decoration:none;">${escapeHtml(button.label)}</a></td></tr></table>`
     : '';
   const footnote = footnoteHtml ? `<p style="margin:0 0 8px;">${footnoteHtml}</p>` : '';
   return `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>${escapeHtml(heading)}</title></head>
 <body style="margin:0;padding:0;background:${brandColours.paper};">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preview)}</div>
+<div style="display:none;mso-hide:all;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preview)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${brandColours.paper};">
 <tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
 <tr><td style="background:${brandColours.navy};padding:22px 32px;"><a href="${escapeHtml(site)}"><img src="${escapeHtml(site)}/email/logo.png" width="132" alt="CaribbeanTender" style="display:block;border:0;height:auto;"></a></td></tr>
 <tr><td style="height:4px;background:${brandColours.gold};font-size:0;line-height:0;">&nbsp;</td></tr>
 <tr><td style="padding:32px;font-family:${bodyFont};font-size:15px;line-height:1.6;color:${brandColours.text};">
@@ -98,13 +107,15 @@ export function composeEmail(due: DueEmail, siteUrl: string): OutgoingEmail {
   const subjectTitle = title.replace(/[\r\n]+/g, ' ').slice(0, 120);
   const link = `${siteUrl.replace(/\/+$/, '')}/tenders/${encodeURIComponent(text(due.details, 'tender_id'))}`;
   const safeTitle = escapeHtml(title);
+  // due_emails sends bid_count with bids_opened (migration 20261117030000); null if it is missing.
+  const bidCount = typeof due.details.bid_count === 'number' ? due.details.bid_count : null;
   const content: Record<EmailType, { subject: string; heading: string; body: string; buttonLabel: string; footnote?: string }> = {
     bid_receipt: {
       subject: `Bid received: ${subjectTitle}`,
       heading: 'Your bid was received',
       body:
         paragraph(`Your sealed bid for <strong>${safeTitle}</strong> was received at <strong>${escapeHtml(when(due.details, 'submitted_at'))}</strong>.`) +
-        paragraph(`Amount: ${escapeHtml(text(due.details, 'amount'))} ${escapeHtml(text(due.details, 'currency'))}. Bids can't be changed after submission.`),
+        paragraph(`Amount: ${escapeHtml(amount(due.details))}. Bids can't be changed after submission.`),
       buttonLabel: 'Open the tender',
       footnote: 'Keep this email as your receipt.',
     },
@@ -122,12 +133,20 @@ export function composeEmail(due: DueEmail, siteUrl: string): OutgoingEmail {
       buttonLabel: 'Open the tender',
       footnote: alertFootnote,
     },
-    bids_opened: {
-      subject: `Bids are open: ${subjectTitle}`,
-      heading: 'Your bids are open',
-      body: paragraph(`Your tender <strong>${safeTitle}</strong> has closed. You can now read every bid.`),
-      buttonLabel: 'Open the tender',
-    },
+    bids_opened:
+      bidCount === 0
+        ? {
+            subject: `Tender closed: ${subjectTitle}`,
+            heading: 'Your tender has closed',
+            body: paragraph(`Your tender <strong>${safeTitle}</strong> has closed. No bids were submitted before the closing time.`),
+            buttonLabel: 'Open the tender',
+          }
+        : {
+            subject: `Bids are open: ${subjectTitle}`,
+            heading: 'Your bids are open',
+            body: paragraph(`Your tender <strong>${safeTitle}</strong> has closed${bidCount === null ? '' : `, and ${bidCount} ${bidCount === 1 ? 'bid' : 'bids'} came in`}. You can now read every bid.`),
+            buttonLabel: 'Open the tender',
+          },
   };
   const chosen = content[due.type];
   return {

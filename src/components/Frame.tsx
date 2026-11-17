@@ -13,7 +13,8 @@ import logoFullLight from '../assets/brand/logo-full-light.webp';
 import logoMarkLight from '../assets/brand/logo-mark-light.webp';
 import logoMark from '../assets/brand/logo-mark.webp';
 import { AccountPicture } from './AccountPicture.tsx';
-import { Loading, Notice } from './Notices.tsx';
+import { ErrorNotice, Loading, Notice } from './Notices.tsx';
+import { Button } from './ui/button.tsx';
 
 // Loaded only when the tour opens, so it adds nothing to every other page.
 const Tour = lazy(async () => ({ default: (await import('./Tour.tsx')).Tour }));
@@ -153,17 +154,20 @@ function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountT
   const hasOtherAccount = otherType === 'business' ? businessProfile !== null : otherType === 'supplier' ? supplierProfile !== null : false;
   const closeMenu = () => menuRef.current?.hidePopover();
 
-  async function addOtherAccount() {
-    if (!session || !otherType) return;
+  // A login with neither account (staff, or one made in the Supabase dashboard) is offered both.
+  const missingTypes = (['business', 'supplier'] as const).filter((type) => (type === 'business' ? businessProfile : supplierProfile) === null);
+
+  async function addAccount(newType: AccountType) {
+    if (!session) return;
     setIsCreating(true);
     setProblem(null);
     try {
-      await createAccount(otherType, session);
+      await createAccount(newType, session);
       await refreshAccounts();
       closeMenu();
-      void navigate(`${dashboardPath[otherType]}/profile`);
+      void navigate(`${dashboardPath[newType]}/profile`);
     } catch (error) {
-      setProblem(`Unable to add the ${accountLabel[otherType].toLowerCase()} account: ${errorMessage(error)}`);
+      setProblem(`Unable to add the ${accountLabel[newType].toLowerCase()} account: ${errorMessage(error)}`);
     } finally {
       setIsCreating(false);
     }
@@ -239,10 +243,19 @@ function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountT
                     <MenuRow icon={ArrowLeftRightIcon} label={`Switch to your ${accountLabel[otherType].toLowerCase()} account`} />
                   </Link>
                 ) : (
-                  <button type="button" className={menuItem} disabled={isCreating} onClick={() => void addOtherAccount()}>
+                  <button type="button" className={menuItem} disabled={isCreating} onClick={() => void addAccount(otherType)}>
                     <MenuRow icon={PlusIcon} label={isCreating ? 'Please wait…' : `Add a ${accountLabel[otherType].toLowerCase()} account`} detail={otherAccountPurpose[otherType]} />
                   </button>
                 ))}
+            </div>
+          )}
+          {!accountType && session && missingTypes.length > 0 && (
+            <div className="grid gap-0.5 border-t pt-1.5">
+              {missingTypes.map((type) => (
+                <button key={type} type="button" className={menuItem} disabled={isCreating} onClick={() => void addAccount(type)}>
+                  <MenuRow icon={PlusIcon} label={isCreating ? 'Please wait…' : `Add a ${accountLabel[type].toLowerCase()} account`} detail={otherAccountPurpose[type]} />
+                </button>
+              ))}
             </div>
           )}
           <div className="grid gap-0.5 border-t pt-1.5">
@@ -275,6 +288,8 @@ function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountTyp
   const [topMarker, isAtTop] = useIsAtTop();
   const accountType = useActiveAccountType(pageAccountType);
   const [isTourRequested, setIsTourRequested] = useState(false);
+  // Closed here as soon as the person closes it, even before (or without) the profile recording it.
+  const [closedTourFor, setClosedTourFor] = useState<AccountType | null>(null);
   const hasFormPhoto = formPhotoPaths.has(pathname);
   const isOverPhoto = (photoTopPaths.has(pathname) || hasFormPhoto) && isAtTop;
   const isFullWidth = fullWidthPaths.has(pathname);
@@ -285,7 +300,7 @@ function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountTyp
   const completedTours = personProfile?.onboarding_completed;
   const hasSeenTour = (type: AccountType) => typeof completedTours === 'object' && completedTours !== null && !Array.isArray(completedTours) && type in completedTours;
   const isFirstVisit = accountType !== null && pageAccountType === accountType && personProfile !== null && !hasSeenTour(accountType);
-  const isTourOpen = accountType !== null && (isTourRequested || isFirstVisit);
+  const isTourOpen = accountType !== null && (isTourRequested || (isFirstVisit && closedTourFor !== accountType));
 
   const linkTone = (isActive: boolean) =>
     isOverPhoto
@@ -396,6 +411,7 @@ function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountTyp
             accountType={accountType}
             onClose={() => {
               setIsTourRequested(false);
+              setClosedTourFor(accountType);
               void refreshAccounts();
             }}
           />
@@ -420,13 +436,22 @@ export function PublicLayout() {
  * what each account may actually read and change.
  */
 function RequireAccount({ accountType, children }: { accountType: AccountType; children: ReactNode }) {
-  const { session, isLoading, businessProfile, supplierProfile } = useAccount();
+  const { session, isLoading, businessProfile, supplierProfile, accountsError, refreshAccounts } = useAccount();
   const location = useLocation();
   if (isLoading) {
     return <Loading />;
   }
   if (!session) {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+    // Path and query, so a ?tender= link or a filter survives signing in.
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  }
+  if (accountsError) {
+    return (
+      <>
+        <ErrorNotice error={accountsError} />
+        <Button type="button" variant="outline" onClick={() => void refreshAccounts()}>Try again</Button>
+      </>
+    );
   }
   const profile = accountType === 'business' ? businessProfile : supplierProfile;
   if (!profile) {
@@ -458,7 +483,7 @@ export function RequireSignIn({ children }: { children: ReactNode }) {
     return <Loading />;
   }
   if (!session) {
-    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname)}`} replace />;
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
   return <>{children}</>;
 }

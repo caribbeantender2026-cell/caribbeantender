@@ -1,20 +1,25 @@
 /** Fills in, shows and downloads a form defined as data (PRD P1-11); no form needs its own interface code. */
-import { Fragment, useState } from 'react';
+import { Fragment, useState, type ComponentProps } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { classNames } from '../lib/classNames.ts';
-import { displayValue, grandTotal, lineTotal, readSchema, showsLineTotal, tableRows, type FormData, type FormField, type FormRow, type FormSchema } from '../lib/forms.ts';
+import { displayValue, grandTotal, lineTotal, numberFieldText, readNumber, readSchema, showsLineTotal, tableRows, type FormData, type FormField, type FormRow, type FormSchema } from '../lib/forms.ts';
 import { errorMessage, supabase } from '../lib/supabase.ts';
-import { Notice } from './Notices.tsx';
+import { ErrorNotice, Notice } from './Notices.tsx';
 import { Button } from './ui/button.tsx';
 import { Choice, Field, Input, Textarea } from './ui/fields.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table.tsx';
 
-/** The newest active version of a form, with its schema read defensively. */
-export function useFormDefinition(formKey: string) {
+/**
+ * One version of a form (the newest active one when no version is given), with its schema read
+ * defensively. A saved form must be shown and edited with the version it was saved under.
+ */
+export function useFormDefinition(formKey: string, version?: number) {
   return useQuery({
-    queryKey: ['form-definition', formKey],
+    queryKey: ['form-definition', formKey, version ?? 'newest'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('form_definitions').select('*').eq('key', formKey).eq('is_active', true).order('version', { ascending: false }).limit(1).maybeSingle();
+      // Only active versions are readable.
+      const request = supabase.from('form_definitions').select('*').eq('key', formKey).eq('is_active', true);
+      const { data, error } = await (version === undefined ? request.order('version', { ascending: false }).limit(1) : request.eq('version', version)).maybeSingle();
       if (error) throw error;
       return data ? { ...data, parsedSchema: readSchema(data.schema) } : null;
     },
@@ -34,10 +39,20 @@ function savePdf(bytes: Uint8Array, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(link.href), downloadLinkLifetimeMilliseconds);
 }
 
-/** Reads a typed number, or null for an empty or unreadable entry. */
-function numberOrNull(text: string): number | null {
-  const parsed = Number(text);
-  return text.trim() === '' || !Number.isFinite(parsed) ? null : parsed;
+/** A number box that keeps what was typed on screen ("12.", "1,500") while storing the number it reads as. */
+function NumberInput({ value, onChange, ...properties }: Omit<ComponentProps<typeof Input>, 'value' | 'onChange'> & { value: unknown; onChange: (value: number | null) => void }) {
+  const [typed, setTyped] = useState('');
+  return (
+    <Input
+      inputMode="decimal"
+      {...properties}
+      value={numberFieldText(typed, typeof value === 'number' ? value : null)}
+      onChange={(event) => {
+        setTyped(event.target.value);
+        onChange(readNumber(event.target.value));
+      }}
+    />
+  );
 }
 
 function TableField({ field, rows, onChange, idPrefix }: { field: FormField; rows: FormRow[]; onChange: (rows: FormRow[]) => void; idPrefix: string }) {
@@ -57,18 +72,19 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
         <TableBody>
           {rows.map((row, rowIndex) => (
             <TableRow key={rowIndex}>
-              {columns.map((column) => (
-                <TableCell key={column.name}>
-                  <Input
-                    aria-label={`${column.label}, row ${rowIndex + 1}`}
-                    id={`${idPrefix}-${rowIndex}-${column.name}`}
-                    inputMode={column.type === 'number' ? 'decimal' : undefined}
-                    maxLength={column.maxLength}
-                    value={row[column.name] ?? ''}
-                    onChange={(event) => setCell(rowIndex, column.name, column.type === 'number' ? numberOrNull(event.target.value) : event.target.value)}
-                  />
-                </TableCell>
-              ))}
+              {columns.map((column) => {
+                const cellLabel = `${column.label}, row ${rowIndex + 1}`;
+                const cellId = `${idPrefix}-${rowIndex}-${column.name}`;
+                return (
+                  <TableCell key={column.name}>
+                    {column.type === 'number' ? (
+                      <NumberInput aria-label={cellLabel} id={cellId} value={row[column.name]} onChange={(value) => setCell(rowIndex, column.name, value)} />
+                    ) : (
+                      <Input aria-label={cellLabel} id={cellId} maxLength={column.maxLength} value={row[column.name] ?? ''} onChange={(event) => setCell(rowIndex, column.name, event.target.value)} />
+                    )}
+                  </TableCell>
+                );
+              })}
               {field.lineTotal && showsLineTotal(field.lineTotal) && <TableCell>{displayValue(lineTotal(row, field.lineTotal))}</TableCell>}
               <TableCell>
                 <button
@@ -137,7 +153,7 @@ export function FormFields({ schema, data, onChange, idPrefix = 'form' }: { sche
               ) : field.type === 'textarea' ? (
                 <Textarea id={id} rows={5} maxLength={field.maxLength} value={typeof value === 'string' ? value : ''} onChange={(event) => set(event.target.value)} />
               ) : field.type === 'number' ? (
-                <Input id={id} inputMode="decimal" value={value === null || value === undefined ? '' : String(value)} onChange={(event) => set(numberOrNull(event.target.value))} />
+                <NumberInput id={id} value={value} onChange={set} />
               ) : (
                 <Input id={id} type={inputTypes[field.type] ?? 'text'} maxLength={field.maxLength} value={typeof value === 'string' ? value : ''} onChange={(event) => set(event.target.value)} />
               )}
@@ -154,7 +170,8 @@ export function FormAnswers({ schema, data }: { schema: FormSchema; data: FormDa
   const known = new Set(schema.fields.map((field) => field.name));
   const unknownKeys = Object.keys(data).filter((key) => !known.has(key));
   return (
-    <dl className="my-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm [&>dt]:text-muted-foreground">
+    // Labels stack above answers on phones and wrap at a set width on wider screens; the client's labels run to 100 characters.
+    <dl className="my-3 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:gap-y-2 [&>dt]:text-muted-foreground">
       {schema.fields.map((field) => {
         const value = data[field.name];
         if (field.type !== 'table') {
@@ -211,17 +228,12 @@ export function PdfButton({ title, schema, data, fileName, notes = [] }: { title
 
 /** A saved form attached to a tender or bid: the answers under the exact version it was filled in with, and its PDF. */
 export function AttachedForm({ formKey, formVersion, data, notes = [] }: { formKey: string; formVersion: number; data: FormData; notes?: string[] }) {
-  const definitionQuery = useQuery({
-    queryKey: ['form-definition', formKey, formVersion],
-    queryFn: async () => {
-      // Only active versions are readable; an answer saved under a retired one shows its fields as saved.
-      const { data: definition, error } = await supabase.from('form_definitions').select('title, schema').eq('key', formKey).eq('version', formVersion).maybeSingle();
-      if (error) throw error;
-      return { title: definition?.title ?? formKey, schema: readSchema(definition?.schema) };
-    },
-  });
-  if (!definitionQuery.data) return null;
-  const { title, schema } = definitionQuery.data;
+  const definitionQuery = useFormDefinition(formKey, formVersion);
+  if (definitionQuery.isError) return <ErrorNotice error={definitionQuery.error} />;
+  if (definitionQuery.isPending) return null;
+  // An answer saved under a retired version shows its fields as saved.
+  const title = definitionQuery.data?.title ?? formKey;
+  const schema = definitionQuery.data?.parsedSchema ?? { fields: [] };
   return (
     <div className="mt-4 rounded-lg border p-4">
       <h4 className="mb-2 font-semibold">{title}</h4>

@@ -51,6 +51,30 @@ function safeFileName(fileName: string): string {
   return cleaned || 'document';
 }
 
+/** The first chosen file whose stored name repeats an earlier one's ("Quote (A).pdf" and "Quote [A].pdf"), or null. */
+export function sameStoredName(fileNames: string[]): string | null {
+  const seen = new Set<string>();
+  for (const fileName of fileNames) {
+    const stored = safeFileName(fileName);
+    if (seen.has(stored)) return fileName;
+    seen.add(stored);
+  }
+  return null;
+}
+
+// Storage refuses an upload that breaks its rules with security-policy wording; these say which rules.
+const maximumUploadsPerDay = 20;
+/** When a business may upload a draft's files (the tender-documents storage policy). */
+export const draftUploadRule = `Files can only be added while the tender is a draft, and at most ${maximumUploadsPerDay} a day.`;
+/** When a supplier may upload a bid's files (the bid-documents storage policy, the same rule as submit_bid). */
+export const bidUploadRule = `Files can only be added while the tender is open for bids and your trial or subscription is active, and at most ${maximumUploadsPerDay} a day.`;
+
+/** Why a file wasn't uploaded, in plain English: a storage refusal becomes the rule it enforces. */
+export function uploadProblem(fileName: string, error: { message: string }, rule: string): string {
+  if (error.message.includes('row-level security')) return `"${fileName}" was not uploaded. ${rule}`;
+  return `"${fileName}" was not uploaded: ${error.message}`;
+}
+
 /**
  * Where a tender's file goes: tender-documents/{tender id}/..., with an uploaded requirements form in
  * requirements-form/ (the storage policies and publish_tender expect exactly this).

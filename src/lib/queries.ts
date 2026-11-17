@@ -32,6 +32,8 @@ export function useOpenTenders(categoryId: number | null, page: number) {
         .eq('status', 'open')
         .gt('closes_at', new Date().toISOString())
         .order('closes_at')
+        // Tenders closing at the same moment keep one order, so none repeats or goes missing between pages.
+        .order('id')
         .range(page * tendersPerPage, (page + 1) * tendersPerPage - 1);
       if (categoryId !== null) {
         request = request.eq('category_id', categoryId);

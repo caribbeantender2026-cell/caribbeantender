@@ -1,7 +1,7 @@
 // The forms engine's rules mirror private.form_data_problems, so the screen refuses what the database would.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { displayValue, formProblems, grandTotal, lineTotal, readSchema, showsLineTotal, type FormSchema } from '../../src/lib/forms.ts';
+import { displayValue, formProblems, grandTotal, lineTotal, numberFieldText, readNumber, readSchema, showsLineTotal, type FormSchema } from '../../src/lib/forms.ts';
 
 const proposal: FormSchema = {
   fields: [
@@ -111,6 +111,23 @@ test('Pick-one and tick-any fields accept only their listed options', () => {
 
 test('Ticked options read as a list on screen and in the PDF', () => {
   assert.equal(displayValue(['Kingston', 'Islandwide']), 'Kingston, Islandwide');
+});
+
+test('Typed numbers keep their decimals and may be written with thousands commas', () => {
+  assert.equal(readNumber('1,500,000'), 1_500_000);
+  assert.equal(readNumber(' 1250.50 '), 1250.5);
+  assert.equal(readNumber('12.'), 12);
+  assert.equal(readNumber(''), null);
+  assert.equal(readNumber('   '), null);
+  assert.equal(readNumber('abc'), null);
+  assert.equal(readNumber('1e400'), null);
+  // While someone types "12." the box must keep showing "12.", so the decimal point can be typed.
+  assert.equal(numberFieldText('12.', 12), '12.');
+  assert.equal(numberFieldText('1,500', 1500), '1,500');
+  // A value changed from outside (a removed row shifting up, a loaded draft) shows that value instead.
+  assert.equal(numberFieldText('12.', 40), '40');
+  assert.equal(numberFieldText('', null), '');
+  assert.equal(numberFieldText('7', null), '');
 });
 
 test('A per-row total that only repeats one column is not shown as its own column', () => {

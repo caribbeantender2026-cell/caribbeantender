@@ -15,6 +15,8 @@ type AccountState = {
   supplierProfile: Tables<'supplier_profiles'> | null;
   /** The person's staff role, or null for everyone who isn't staff. Admin pages also need MFA (aal2). */
   staffRole: Tables<'staff_members'>['role'] | null;
+  /** Why the accounts couldn't be loaded, or null. Pages must not read a failed load as "no account". */
+  accountsError: Error | null;
   refreshAccounts: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -78,6 +80,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     businessProfile: accountsQuery.data?.businessProfile ?? null,
     supplierProfile: accountsQuery.data?.supplierProfile ?? null,
     staffRole: accountsQuery.data?.staffRole ?? null,
+    accountsError: userId !== null && accountsQuery.isError ? accountsQuery.error : null,
     refreshAccounts: async () => {
       await queryClient.invalidateQueries({ queryKey: ['accounts', userId] });
     },

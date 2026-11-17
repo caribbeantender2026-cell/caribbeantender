@@ -18,7 +18,8 @@ const winAnsiExtras = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜
 
 /** Helvetica can only draw WinAnsi characters; anything else (emoji, most non-Latin scripts) becomes "?". */
 export function pdfSafeText(text: string): string {
-  return Array.from(text.replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
+  // NFC first: "e" plus a combining accent becomes the single "é" Helvetica can draw.
+  return Array.from(text.normalize('NFC').replace(/\r\n?/g, '\n').replace(/\t/g, '    '))
     .map((character) => {
       const code = character.codePointAt(0) ?? 0;
       const isWinAnsi = (code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || winAnsiExtras.includes(character);

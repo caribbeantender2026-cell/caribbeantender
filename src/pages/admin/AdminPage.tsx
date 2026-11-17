@@ -269,7 +269,7 @@ function Tenders() {
 }
 
 export function AdminPage() {
-  const { staffRole } = useAccount();
+  const { staffRole, accountsError } = useAccount();
   const assuranceQuery = useQuery({
     queryKey: ['assurance-level'],
     queryFn: async () => {
@@ -279,6 +279,8 @@ export function AdminPage() {
     },
   });
 
+  // A failed load isn't "not staff": say what went wrong instead.
+  if (accountsError) return <ErrorNotice error={accountsError} />;
   if (!staffRole) return <Notice tone="error">This page is for CaribbeanTender staff.</Notice>;
   if (assuranceQuery.isPending) return <Loading />;
   if (assuranceQuery.isError) return <ErrorNotice error={assuranceQuery.error} />;

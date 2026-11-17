@@ -13,7 +13,8 @@ test('A bid receipt states the exact submission time in Jamaica time', () => {
   const email = composeEmail(due('bid_receipt', { tender_title: 'Office chairs', submitted_at: '2026-11-20T17:30:15Z', amount: 1500.5, currency: 'JMD' }), 'https://caribbeantender.com');
   assert.equal(email.subject, 'Bid received: Office chairs');
   assert.match(email.html, /20 Nov 2026, 12:30:15/);
-  assert.match(email.html, /1500.5 JMD/);
+  // The same amount format as the app's receipt.
+  assert.match(email.html, /Amount: \$1,500\.50 \(JMD\)/);
   assert.match(email.html, new RegExp(`https://caribbeantender.com/tenders/${tenderId}`));
 });
 
@@ -22,7 +23,7 @@ test('Every email carries the brand frame: the logo from the site, a heading, on
     const email = composeEmail(due(type, { tender_title: 'Office chairs', closes_at: '2026-11-25T04:59:59Z' }), 'https://caribbeantender.com/');
     assert.match(email.html, /<img src="https:\/\/caribbeantender.com\/email\/logo.png"/, `${type}: logo`);
     assert.match(email.html, /<h1 /, `${type}: heading`);
-    assert.equal(email.html.match(/background:#D99E04;"><a /g)?.length, 1, `${type}: one gold button`);
+    assert.equal(email.html.match(/background:#D99E04;padding:12px 22px;"><a /g)?.length, 1, `${type}: one gold button`);
     assert.match(email.html, /support@caribbeantender.com/, `${type}: footer`);
   }
 });
@@ -58,4 +59,23 @@ test('Only the exact shared secret starts a send; an unset secret matches nothin
     assert.equal(secretMatches('', expected), false);
     assert.equal(secretMatches('anything', expected), false);
   }
+});
+
+test('The bids-opened email says how many bids came in, and a tender with none is not told to read them', () => {
+  const none = composeEmail(due('bids_opened', { tender_title: 'Office chairs', bid_count: 0 }), 'https://caribbeantender.com');
+  assert.equal(none.subject, 'Tender closed: Office chairs');
+  assert.match(none.html, /No bids were submitted/);
+  assert.ok(!none.html.includes('read every bid'));
+  const three = composeEmail(due('bids_opened', { tender_title: 'Office chairs', bid_count: 3 }), 'https://caribbeantender.com');
+  assert.equal(three.subject, 'Bids are open: Office chairs');
+  assert.match(three.html, /3 bids came in/);
+  assert.match(composeEmail(due('bids_opened', { tender_title: 'X', bid_count: 1 }), 'https://caribbeantender.com').html, /1 bid came in/);
+});
+
+test('The frame holds its width and hides the preview line in desktop Outlook, which ignores max-width', () => {
+  const email = composeEmail(due('new_tender_alert', { tender_title: 'X', closes_at: '2026-11-25T04:59:59Z' }), 'https://caribbeantender.com');
+  assert.match(email.html, /<table role="presentation" width="560" [^>]*style="width:100%;max-width:560px;/);
+  assert.match(email.html, /<div style="display:none;[^"]*mso-hide:all;/);
+  // The button's padding sits on its cell, which Outlook keeps; it drops padding on links.
+  assert.match(email.html, /<td style="border-radius:10px;background:#D99E04;padding:12px 22px;"><a /);
 });

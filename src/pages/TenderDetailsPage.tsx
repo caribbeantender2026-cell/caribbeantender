@@ -12,10 +12,21 @@ import { useCategories, useCompanies } from '../lib/queries.ts';
 import { tenderPhase } from '../lib/rules.ts';
 import { supabase } from '../lib/supabase.ts';
 
-/** A tender and its recorded documents, as the signed-in user may see them. */
+// The close job sets "closed" within a minute of the closing time.
+const closingCheckMilliseconds = 10_000;
+
+/**
+ * A tender and its recorded documents, as the signed-in user may see them. Past its closing time and
+ * not yet closed, it is fetched again every few seconds, so the page moves on once the close job runs.
+ * The calling page must re-render as time passes (useNow) for that check to start.
+ */
 export function useTender(tenderId: string) {
   return useQuery({
     queryKey: ['tender', tenderId],
+    refetchInterval: (query) => {
+      const tender = query.state.data?.tender;
+      return tender?.status === 'open' && new Date(tender.closes_at).getTime() <= Date.now() ? closingCheckMilliseconds : false;
+    },
     queryFn: async () => {
       const [tenderResult, documentsResult, formResult] = await Promise.all([
         supabase.from('tenders').select('*').eq('id', tenderId).maybeSingle(),

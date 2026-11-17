@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bidDocumentPath, checkDocument, maximumDocumentSizeBytes, tenderDocumentPath } from '../../src/lib/documents.ts';
+import { bidDocumentPath, bidUploadRule, checkDocument, draftUploadRule, maximumDocumentSizeBytes, sameStoredName, tenderDocumentPath, uploadProblem } from '../../src/lib/documents.ts';
 
 const tenderId = '11111111-1111-1111-1111-111111111111';
 const bidId = '22222222-2222-2222-2222-222222222222';
@@ -45,4 +45,17 @@ test('Unsafe characters are replaced and very long names are shortened', () => {
   assert.ok(!/[<>]/.test(storedName));
   assert.ok(storedName.endsWith('.pdf'));
   assert.ok(storedName.length < 200);
+});
+
+test('A storage refusal reads as the rule that was broken, not the security-policy text', () => {
+  const refusal = { message: 'new row violates row-level security policy' };
+  assert.equal(uploadProblem('Quote.pdf', refusal, draftUploadRule), `"Quote.pdf" was not uploaded. ${draftUploadRule}`);
+  assert.equal(uploadProblem('Quote.pdf', refusal, bidUploadRule), `"Quote.pdf" was not uploaded. ${bidUploadRule}`);
+  // Any other problem keeps its own message.
+  assert.equal(uploadProblem('Quote.pdf', { message: 'Failed to fetch' }, draftUploadRule), '"Quote.pdf" was not uploaded: Failed to fetch');
+});
+
+test('Two chosen files that would be stored under the same name are found before anything uploads', () => {
+  assert.equal(sameStoredName(['Quote (A).pdf', 'Quote [A].pdf', 'Other.pdf']), 'Quote [A].pdf');
+  assert.equal(sameStoredName(['One.pdf', 'Two.pdf']), null);
 });

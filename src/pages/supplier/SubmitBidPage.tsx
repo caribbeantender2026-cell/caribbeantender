@@ -17,7 +17,7 @@ import { Card, CardContent } from '../../components/ui/card.tsx';
 import { Choice, Field, Input } from '../../components/ui/fields.tsx';
 import type { Json } from '../../lib/database.types.ts';
 import { formProblems, type FormData } from '../../lib/forms.ts';
-import { acceptedDocumentDescription, acceptedDocumentExtensions, bidDocumentPath, checkDocument } from '../../lib/documents.ts';
+import { acceptedDocumentDescription, acceptedDocumentExtensions, bidDocumentPath, bidUploadRule, checkDocument, sameStoredName, uploadProblem } from '../../lib/documents.ts';
 import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
 import { subscriptionPrices, supplierHasAccess, tenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase, supportEmail } from '../../lib/supabase.ts';
@@ -27,6 +27,8 @@ import { useTender } from '../TenderDetailsPage.tsx';
 // Matches submit_bid: above zero, below 10^12 (numeric(14,2)), at most two decimal places.
 const maximumAmount = 1_000_000_000_000;
 const amountPattern = /^\d+(\.\d{1,2})?$/;
+// Postgres's "unique_violation": the one bid per supplier per tender already exists.
+const uniqueViolationCode = '23505';
 
 export function SubmitBidPage() {
   const tenderId = useParams().tenderId ?? '';
@@ -45,7 +47,8 @@ export function SubmitBidPage() {
   });
   // One id for this bid, chosen here so its files can be uploaded into its folder before it exists.
   const [bidId] = useState(() => crypto.randomUUID());
-  const uploadedPaths = useRef(new Set<string>());
+  // What this page has put in the bid's folder, by path: submit_bid records every file found there.
+  const uploadedFiles = useRef(new Map<string, File>());
   const proposalDefinitionQuery = useFormDefinition('supplier-proposal');
   // The proposal is a file, or the supplier proposal form filled in online (PRD P1-08).
   const [proposalMode, setProposalMode] = useState<'file' | 'online'>('file');
@@ -67,15 +70,32 @@ export function SubmitBidPage() {
   if (!tender) return <Notice tone="error">Tender not found.</Notice>;
   const existingBid = existingBidQuery.data;
 
-  /** Uploads one file into this bid's folder, once, even if the person submits again after an error. */
-  async function uploadOnce(file: File, isProposal: boolean) {
-    const checked = checkDocument(file);
-    if ('problem' in checked) throw new Error(checked.problem);
-    const path = bidDocumentPath(tenderId, bidId, file.name, isProposal);
-    if (uploadedPaths.current.has(path)) return;
-    const { error } = await supabase.storage.from('bid-documents').upload(path, file, { contentType: checked.contentType });
-    if (error) throw new Error(`"${file.name}" was not uploaded: ${error.message}`);
-    uploadedPaths.current.add(path);
+  /**
+   * Makes the bid's folder hold exactly the chosen files, even after a failed attempt: a file from an
+   * earlier attempt that is no longer chosen (or was chosen again) is removed, and each file uploads once.
+   */
+  async function syncBidFiles(chosen: { file: File; isProposal: boolean }[]) {
+    const bucket = supabase.storage.from('bid-documents');
+    const wanted = new Map(chosen.map(({ file, isProposal }) => [bidDocumentPath(tenderId, bidId, file.name, isProposal), file]));
+    const stalePaths = [...uploadedFiles.current].filter(([path, file]) => wanted.get(path) !== file).map(([path]) => path);
+    if (stalePaths.length > 0) {
+      const removed = await bucket.remove(stalePaths);
+      if (removed.error) throw new Error(`A file from your earlier attempt could not be removed: ${removed.error.message}`);
+      for (const path of stalePaths) uploadedFiles.current.delete(path);
+    }
+    for (const [path, file] of wanted) {
+      if (uploadedFiles.current.get(path) === file) continue;
+      const checked = checkDocument(file);
+      if ('problem' in checked) throw new Error(checked.problem);
+      let { error } = await bucket.upload(path, file, { contentType: checked.contentType });
+      if (error?.message.includes('already exists')) {
+        // An earlier attempt reached storage but its answer was lost on the way back; replace that copy.
+        await bucket.remove([path]);
+        ({ error } = await bucket.upload(path, file, { contentType: checked.contentType }));
+      }
+      if (error) throw new Error(uploadProblem(file.name, error, bidUploadRule));
+      uploadedFiles.current.set(path, file);
+    }
   }
 
   /** Saves the online proposal form, unattached; submit_bid attaches it and locks it. */
@@ -101,8 +121,13 @@ export function SubmitBidPage() {
     if (!amountPattern.test(amountText.trim()) || !(amount > 0) || amount >= maximumAmount) {
       return setProblem('Enter a bid amount above zero, with at most two decimal places.');
     }
+    if (tender && tenderPhase(tender) !== 'accepting-bids') {
+      return setProblem(`This tender closed at ${formatJamaicaDateTime(tender.closes_at)} Jamaica time, so it no longer takes bids.`);
+    }
     const proposalSchema = proposalDefinitionQuery.data?.parsedSchema;
     if (proposalMode === 'file' && !proposal) return setProblem('Attach your proposal.');
+    const repeatedName = sameStoredName(supportingFiles.map((file) => file.name));
+    if (repeatedName) return setProblem(`"${repeatedName}" would be stored under the same name as another supporting document. Rename one of them and choose the files again.`);
     if (proposalMode === 'online') {
       const problems = formProblems(proposalSchema ?? { fields: [] }, proposalData, true);
       if (!proposalSchema || problems.length > 0) return setProblem(problems.join(' ') || 'The proposal form is not available.');
@@ -117,13 +142,9 @@ export function SubmitBidPage() {
     if (!isConfirmed) return;
     setIsSubmitting(true);
     try {
-      let proposalFormId: string | undefined;
-      if (proposalMode === 'file' && proposal) {
-        await uploadOnce(proposal, true);
-      } else {
-        proposalFormId = await saveProposalForm();
-      }
-      for (const file of supportingFiles) await uploadOnce(file, false);
+      const proposalFile = proposalMode === 'file' && proposal ? [{ file: proposal, isProposal: true }] : [];
+      await syncBidFiles([...proposalFile, ...supportingFiles.map((file) => ({ file, isProposal: false }))]);
+      const proposalFormId = proposalMode === 'online' ? await saveProposalForm() : undefined;
       const { error } = await supabase.rpc('submit_bid', {
         tender_id: tenderId,
         bid_id: bidId,
@@ -134,6 +155,12 @@ export function SubmitBidPage() {
       await queryClient.invalidateQueries({ queryKey: ['own-bid', tenderId, supplierId] });
       await queryClient.invalidateQueries({ queryKey: ['own-bids'] });
     } catch (error) {
+      const isDuplicateBid = typeof error === 'object' && error !== null && 'code' in error && error.code === uniqueViolationCode;
+      if (isDuplicateBid) {
+        // Another tab sent this supplier's bid first; show its receipt.
+        await queryClient.invalidateQueries({ queryKey: ['own-bid', tenderId, supplierId] });
+        return;
+      }
       setProblem(errorMessage(error));
     } finally {
       setIsSubmitting(false);
@@ -196,10 +223,14 @@ export function SubmitBidPage() {
               <Field label="Proposal file" htmlFor="bidProposal">
                 <Input id="bidProposal" type="file" accept={acceptedDocumentExtensions} onChange={(event) => setProposal(event.target.files?.[0] ?? null)} />
               </Field>
+            ) : proposalDefinitionQuery.isError ? (
+              <ErrorNotice error={proposalDefinitionQuery.error} />
+            ) : proposalDefinitionQuery.isPending ? (
+              <Loading />
             ) : proposalDefinitionQuery.data ? (
               <FormFields schema={proposalDefinitionQuery.data.parsedSchema} data={proposalData} onChange={setProposalData} idPrefix="proposal" />
             ) : (
-              <Loading />
+              <Notice tone="error">The online proposal form isn't available. Upload your proposal as a file instead.</Notice>
             )}
 
             <Field label="Supporting documents (optional)" htmlFor="bidSupporting" hint={`${acceptedDocumentDescription} each.`}>

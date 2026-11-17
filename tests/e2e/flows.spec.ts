@@ -102,6 +102,10 @@ test('A business posts a tender with the requirements form filled in online and 
   await page.getByLabel('Date', { exact: true }).fill('2026-11-16');
   await page.getByRole('button', { name: 'Save and attach to the draft' }).click();
   await expect(page.getByText('Filled in online.')).toBeVisible();
+  // Opened again straight away, the saved answers are there (the draft page once cached an empty copy under the same key).
+  await page.getByRole('link', { name: 'Edit the online form' }).click();
+  await expect(page.getByLabel('Company name', { exact: true })).toHaveValue('rls-test Hotels');
+  await page.getByRole('link', { name: 'Back to your draft' }).click();
   await page.getByLabel('Add supporting documents').setInputFiles({ name: 'rls-test-spec.pdf', mimeType: 'application/pdf', buffer: documentBytes });
   await expect(page.getByText('rls-test-spec.pdf')).toBeVisible();
 
@@ -158,7 +162,7 @@ test('A supplier bids with the proposal form filled in online and gets the recei
     ['Email address', 'rls-test-supplier@example.com'],
     ['Proposal summary: why your company is best suited to deliver', '40 chairs within 14 days'],
     ['How you will carry out the work: key activities, processes, equipment, personnel and quality assurance', 'Deliver from stock'],
-    ['Total bid value (JMD)', '98000'],
+    ['Total bid value (JMD)', '98,020.00'],
     ['Authorized representative name', 'rls-test supplier representative'],
     ['Position', 'Director'],
     ['Date', '2026-11-16'],
@@ -169,7 +173,12 @@ test('A supplier bids with the proposal form filled in online and gets the recei
   await page.getByRole('button', { name: 'Add a row' }).first().click();
   await page.getByLabel('Item / Service, row 1').fill('Chair');
   await page.getByLabel('Quantity, row 1').fill('40');
-  await page.getByLabel('Unit price (JMD), row 1').fill('2450');
+  // Typed as people write prices: thousands commas and cents stay on screen and count in the total.
+  const unitPrice = page.getByLabel('Unit price (JMD), row 1');
+  await unitPrice.pressSequentially('2,450.50');
+  await expect(unitPrice).toHaveValue('2,450.50');
+  await expect(page.getByLabel('Total bid value (JMD)', { exact: true })).toHaveValue('98,020.00');
+  await expect(page.getByRole('cell', { name: '98,020' })).toBeVisible();
   await page.getByRole('button', { name: 'Add a row' }).last().click();
   await page.getByLabel('Reference name, row 1').fill('rls-test reference');
   await page.getByLabel('Telephone, row 1').fill('876-555-0102');
@@ -188,11 +197,10 @@ test('The tender closes by itself; a late bid is refused; the business opens the
 
   const page = await signIn(browser, business);
   await page.goto(`/business/tenders/${tenderId}`);
-  await expect(async () => {
-    await page.reload();
-    await expect(page.getByText('Closed', { exact: true })).toBeVisible({ timeout: 2000 });
-  }).toPass({ timeout: closeJobGraceMilliseconds, intervals: [5000] });
-  await expect(page.getByText('e2e-supplier Company')).toBeVisible();
+  // No reload: the page checks for the close job by itself once the closing time has passed.
+  await expect(page.getByText('Closed', { exact: true })).toBeVisible({ timeout: closeJobGraceMilliseconds });
+  // The bid's heading; the name also shows in the attached proposal form's answers.
+  await expect(page.getByRole('heading', { name: 'e2e-supplier Company' })).toBeVisible();
   await page.getByRole('button', { name: 'Award to this bid' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Award the tender' }).click();
   await expect(page.getByText('Awarded', { exact: true }).first()).toBeVisible();

@@ -72,7 +72,8 @@ function Field({ label, htmlFor, hint, error, className, children }: { label: Re
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
       {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
-      {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+      {/* role="alert" so screen readers announce the problem when it appears, not only sighted people. */}
+      {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
     </div>
   );
 }

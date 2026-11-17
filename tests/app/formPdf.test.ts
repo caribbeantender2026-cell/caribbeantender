@@ -62,3 +62,7 @@ test('A very long answer wraps onto more pages, and a word longer than a line is
   const document = await PDFDocument.load(await formToPdf('Long form', schema, { need: longAnswer, costs: [] }));
   assert.ok(document.getPageCount() > 1, `pages: ${document.getPageCount()}`);
 });
+
+test('Accents typed as a letter plus a combining mark (as pasted from some Mac and PDF sources) keep their letter', () => {
+  assert.equal(pdfSafeText('Re\u0301sume\u0301'), 'Résumé');
+});

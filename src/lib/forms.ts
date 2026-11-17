@@ -147,6 +147,22 @@ export function grandTotal(rows: FormRow[], rule: NonNullable<FormField['lineTot
   return rows.reduce((total, row) => total + lineTotal(row, rule), 0);
 }
 
+/** Reads a typed number, allowing thousands commas ("1,500,000"); null for an empty or unreadable entry. */
+export function readNumber(text: string): number | null {
+  const withoutCommas = text.replaceAll(',', '').trim();
+  const parsed = Number(withoutCommas);
+  return withoutCommas === '' || !Number.isFinite(parsed) ? null : parsed;
+}
+
+/**
+ * What a number box shows: what the person typed while it still reads as the stored value (so "12." stays
+ * on screen and the decimal point can be typed), otherwise the stored value, such as a loaded draft's.
+ */
+export function numberFieldText(typed: string, value: number | null): string {
+  if (readNumber(typed) === value) return typed;
+  return value === null ? '' : String(value);
+}
+
 /** A value as it reads on screen and in the PDF. */
 export function displayValue(value: unknown): string {
   if (value === null || value === undefined) return '';

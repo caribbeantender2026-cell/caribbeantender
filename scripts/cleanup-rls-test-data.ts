@@ -8,6 +8,7 @@
  *
  * Usage: node --env-file=.env.production.local scripts/cleanup-rls-test-data.ts <run id>
  */
+import { existsSync, readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { queryLinked } from './supabase-cli.ts';
 
@@ -19,6 +20,13 @@ const supabaseUrl = process.env.PRODUCTION_SUPABASE_URL ?? '';
 const secretKey = process.env.PRODUCTION_SUPABASE_SECRET_KEY ?? '';
 if (!supabaseUrl || !secretKey) {
   throw new Error('Set PRODUCTION_SUPABASE_URL and PRODUCTION_SUPABASE_SECRET_KEY (.env.production.local).');
+}
+// The lookups and deletes go through the CLI link, so it must be the project the test accounts were
+// made in; another linked project would find none and report a clean run.
+const linkFile = 'supabase/.temp/project-ref';
+const linkedProjectRef = existsSync(linkFile) ? readFileSync(linkFile, 'utf8').trim() : '';
+if (!linkedProjectRef || new URL(supabaseUrl).hostname.split('.')[0] !== linkedProjectRef) {
+  throw new Error(`The Supabase CLI is linked to "${linkedProjectRef || 'no project'}", not the project in PRODUCTION_SUPABASE_URL. Run supabase link --project-ref <ref> first.`);
 }
 const adminClient = createClient(supabaseUrl, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

@@ -4,7 +4,7 @@
  * at most once, and only to EMAIL_ALLOWLIST until go-live (OPEN_QUESTIONS.md, decision D3).
  */
 import { createClient } from 'npm:@supabase/supabase-js@2.117.2';
-import { parseAllowlist, sendEmail, type EmailOutcome, type EmailServices } from '../_shared/email.ts';
+import { idempotencyKey, parseAllowlist, sendEmail, type EmailOutcome, type EmailServices } from '../_shared/email.ts';
 import { composeEmail, secretMatches, type DueEmail } from './notifications.ts';
 
 const batchSize = 50;
@@ -34,6 +34,11 @@ Deno.serve(async (request) => {
       if (claimed.error) throw new Error(claimed.error.message);
       return claimed.data.length > 0;
     },
+    reclaimLogRow: async (email) => {
+      const reclaimed = await database.rpc('reclaim_email', { email_type: email.type, email_recipient: email.recipient, email_entity_id: email.entityId });
+      if (reclaimed.error) throw new Error(reclaimed.error.message);
+      return reclaimed.data === true;
+    },
     finishLogRow: async (email, status, providerMessageId) => {
       const finished = await database
         .from('email_log')
@@ -45,7 +50,7 @@ Deno.serve(async (request) => {
       if (!resendApiKey) throw new Error('RESEND_API_KEY is not set.');
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': await idempotencyKey(email) },
         body: JSON.stringify({ from: sender, to: [email.recipient], subject: email.subject, html: email.html }),
       });
       const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
@@ -58,7 +63,13 @@ Deno.serve(async (request) => {
   const siteUrl = Deno.env.get('SITE_URL') ?? 'https://caribbeantender.com';
   const outcomes: Record<EmailOutcome, number> = { sent: 0, suppressed: 0, already_handled: 0, failed: 0 };
   for (const row of due.data as DueEmail[]) {
-    outcomes[await sendEmail(composeEmail(row, siteUrl), isAllowed, services)] += 1;
+    try {
+      outcomes[await sendEmail(composeEmail(row, siteUrl), isAllowed, services)] += 1;
+    } catch (error) {
+      // One database hiccup mustn't stop the rest of the batch; the row is offered again once its retry is due.
+      console.error(`Email ${row.type} for ${row.entity_id} hit a database error:`, error);
+      outcomes.failed += 1;
+    }
   }
   // Counts only: the log holds the addresses.
   return new Response(JSON.stringify(outcomes), { headers: { 'Content-Type': 'application/json' } });

@@ -6,7 +6,9 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAccount } from '../../auth/AccountContext.tsx';
 import { AccountPicture } from '../../components/AccountPicture.tsx';
+import { useNow } from '../../components/TenderView.tsx';
 import { DocumentList, type RecordedDocument } from '../../components/DocumentList.tsx';
 import { AttachedForm } from '../../components/FormFields.tsx';
 import type { FormData } from '../../lib/forms.ts';
@@ -40,11 +42,14 @@ const phaseGuidance: Record<TenderPhase, string> = {
 type BidDocument = { document_id: string; file_name: string; size_bytes: number; document_role: RecordedDocument['document_role'] };
 
 /** Every bid with its supplier's name, readable from the closing time; the first read is logged as "bids opened". */
-function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: boolean; onChanged: () => Promise<void> }) {
+function Bids({ tenderId, tenderStatus, canAward, onChanged }: { tenderId: string; tenderStatus: string; canAward: boolean; onChanged: () => Promise<void> }) {
   const [problem, setProblem] = useState<string | null>(null);
+  const [isAwarding, setIsAwarding] = useState(false);
   const [confirmation, askToConfirm] = useConfirmation();
   const bidsQuery = useQuery({
-    queryKey: ['tender-bids', tenderId],
+    // Keyed by the tender's status too: a "still sealed" answer from a fast device clock is asked again
+    // once the tender closes, and a cancel or award shows the bids' new statuses.
+    queryKey: ['tender-bids', tenderId, tenderStatus],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('read_tender_bids', { tender_id: tenderId });
       if (error) throw error;
@@ -62,10 +67,14 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
       tone: 'go-ahead',
     });
     if (!isConfirmed) return;
-    const { error } = await supabase.rpc('award_tender', { tender_id: tenderId, bid_id: bidId });
-    if (error) return setProblem(errorMessage(error));
-    await onChanged();
-    await bidsQuery.refetch();
+    setIsAwarding(true);
+    try {
+      const { error } = await supabase.rpc('award_tender', { tender_id: tenderId, bid_id: bidId });
+      if (error) return setProblem(errorMessage(error));
+      await onChanged();
+    } finally {
+      setIsAwarding(false);
+    }
   }
 
   if (bidsQuery.isPending) return <Loading />;
@@ -96,7 +105,7 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
             })()}
             {canAward && (
               <div className="mt-5 flex flex-wrap items-center gap-2">
-                <Button type="button" variant="gold" onClick={() => void award(bid.bid_id, bid.supplier_company_name || 'this supplier')}>
+                <Button type="button" variant="gold" disabled={isAwarding} onClick={() => void award(bid.bid_id, bid.supplier_company_name || 'this supplier')}>
                   Award to this bid
                 </Button>
               </div>
@@ -113,8 +122,12 @@ export function TenderManagePage() {
   const tenderId = useParams().tenderId ?? '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { session } = useAccount();
+  // Re-rendered every second, so the page moves from "open" to "closing" at the closing time by itself.
+  const now = useNow();
   const tenderQuery = useTender(tenderId);
   const [problem, setProblem] = useState<string | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
   const [newClosesAt, setNewClosesAt] = useState('');
   const [reason, setReason] = useState('');
   const [confirmation, askToConfirm] = useConfirmation();
@@ -122,14 +135,21 @@ export function TenderManagePage() {
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ['tender', tenderId] });
     await queryClient.invalidateQueries({ queryKey: ['own-tenders'] });
+    // Publishing and cancelling change which tenders are open.
+    await queryClient.invalidateQueries({ queryKey: ['open-tenders'] });
   }
 
   /** Runs one lifecycle call; the database refuses anything the rules don't allow, with its own message. */
   async function act(call: () => PromiseLike<{ error: unknown }>) {
     setProblem(null);
-    const { error } = await call();
-    if (error) return setProblem(errorMessage(error));
-    await refresh();
+    setIsBusy(true);
+    try {
+      const { error } = await call();
+      if (error) return setProblem(errorMessage(error));
+      await refresh();
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function deleteDraft() {
@@ -142,6 +162,7 @@ export function TenderManagePage() {
     });
     if (!isConfirmed) return;
     setProblem(null);
+    setIsBusy(true);
     try {
       const files = await listDraftFiles(tenderId);
       const paths = [...files.supporting, ...files.requirements].map((file) => file.path);
@@ -149,11 +170,21 @@ export function TenderManagePage() {
         const removed = await supabase.storage.from('tender-documents').remove(paths);
         if (removed.error) throw removed.error;
       }
+      // The online requirements form isn't linked to the tender by a foreign key, so it goes by hand.
+      const form = await supabase.from('form_submissions').delete().eq('attached_to_type', 'tender').eq('attached_to_id', tenderId);
+      if (form.error) throw form.error;
+      // Only drafts can be deleted; one published meanwhile (in another tab) matches no row.
+      const deleted = await supabase.from('tenders').delete().eq('id', tenderId).select('id');
+      if (deleted.error) throw deleted.error;
+      if (deleted.data.length === 0) {
+        await refresh();
+        return setProblem('Nothing was deleted: this tender is no longer a draft.');
+      }
     } catch (error) {
       return setProblem(errorMessage(error));
+    } finally {
+      setIsBusy(false);
     }
-    const { error } = await supabase.from('tenders').delete().eq('id', tenderId);
-    if (error) return setProblem(errorMessage(error));
     await queryClient.invalidateQueries({ queryKey: ['own-tenders'] });
     void navigate('/business');
   }
@@ -161,9 +192,10 @@ export function TenderManagePage() {
   if (tenderQuery.isPending) return <Loading />;
   if (tenderQuery.isError) return <ErrorNotice error={tenderQuery.error} />;
   const tender = tenderQuery.data.tender;
-  if (!tender) return <Notice tone="error">Tender not found.</Notice>;
+  // Anyone signed in can read a published tender; only its business manages it.
+  if (!tender || tender.business_id !== session?.user.id) return <Notice tone="error">Tender not found.</Notice>;
 
-  const phase = tenderPhase(tender);
+  const phase = tenderPhase(tender, now);
   const history: [string, string | null][] = [
     ['Created', tender.created_at],
     ['Published', tender.published_at],
@@ -171,7 +203,9 @@ export function TenderManagePage() {
     ['Awarded', tender.awarded_at],
     ['Cancelled', tender.cancelled_at],
   ];
-  const bidsReadable = phase === 'awaiting-opening' || phase === 'opened' || phase === 'awarded' || (phase === 'cancelled' && tender.closed_at !== null);
+  // The same rule as private.bids_are_open: bids open at the closing time, unless cancelled before it.
+  const wasCancelledBeforeClosing = tender.cancelled_at !== null && new Date(tender.cancelled_at) < new Date(tender.closes_at);
+  const bidsReadable = phase === 'awaiting-opening' || phase === 'opened' || phase === 'awarded' || (phase === 'cancelled' && !wasCancelledBeforeClosing);
 
   return (
     <>
@@ -216,6 +250,7 @@ export function TenderManagePage() {
               <Button
                 type="button"
                 variant="gold"
+                disabled={isBusy}
                 onClick={async () => {
                   const { isConfirmed } = await askToConfirm({
                     title: 'Publish this tender?',
@@ -229,7 +264,7 @@ export function TenderManagePage() {
               >
                 Publish
               </Button>
-              <Button type="button" variant="outline" onClick={() => void deleteDraft()}>Delete draft</Button>
+              <Button type="button" variant="outline" disabled={isBusy} onClick={() => void deleteDraft()}>Delete draft</Button>
             </div>
           )}
 
@@ -251,7 +286,7 @@ export function TenderManagePage() {
                 <Input id="newClosesAt" type="datetime-local" min={utcToJamaicaLocal(tender.closes_at)} value={newClosesAt} onChange={(event) => setNewClosesAt(event.target.value)} required />
               </Field>
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit">Extend</Button>
+                <Button type="submit" disabled={isBusy}>Extend</Button>
               </div>
             </form>
           )}
@@ -275,7 +310,7 @@ export function TenderManagePage() {
                 <Textarea id="cancelReason" rows={3} maxLength={maximumReasonLength} value={reason} onChange={(event) => setReason(event.target.value)} required />
               </Field>
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit" variant="outline" disabled={reason.trim() === ''}>Cancel tender</Button>
+                <Button type="submit" variant="outline" disabled={isBusy || reason.trim() === ''}>Cancel tender</Button>
               </div>
             </form>
           )}
@@ -287,7 +322,7 @@ export function TenderManagePage() {
         <>
           <h3 className="mb-3 text-base font-semibold text-navy-dark">Bids</h3>
           {phase === 'awaiting-opening' && <Notice>The tender is closing; you can award a bid within a minute.</Notice>}
-          <Bids tenderId={tender.id} canAward={phase === 'opened'} onChanged={refresh} />
+          <Bids tenderId={tender.id} tenderStatus={tender.status} canAward={phase === 'opened'} onChanged={refresh} />
         </>
       )}
     </>
