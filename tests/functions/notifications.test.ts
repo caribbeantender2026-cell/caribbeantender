@@ -17,6 +17,16 @@ test('A bid receipt states the exact submission time in Jamaica time', () => {
   assert.match(email.html, new RegExp(`https://caribbeantender.com/tenders/${tenderId}`));
 });
 
+test('Every email carries the brand frame: the logo from the site, a heading, one button and the footer', () => {
+  for (const type of ['bid_receipt', 'new_tender_alert', 'deadline_reminder', 'bids_opened'] as const) {
+    const email = composeEmail(due(type, { tender_title: 'Office chairs', closes_at: '2026-11-25T04:59:59Z' }), 'https://caribbeantender.com/');
+    assert.match(email.html, /<img src="https:\/\/caribbeantender.com\/email\/logo.png"/, `${type}: logo`);
+    assert.match(email.html, /<h1 /, `${type}: heading`);
+    assert.equal(email.html.match(/background:#D99E04;"><a /g)?.length, 1, `${type}: one gold button`);
+    assert.match(email.html, /support@caribbeantender.com/, `${type}: footer`);
+  }
+});
+
 test('Every type has its own subject', () => {
   const subjects = (['bid_receipt', 'new_tender_alert', 'deadline_reminder', 'bids_opened'] as const).map(
     (type) => composeEmail(due(type, { tender_title: 'X' }), 'https://caribbeantender.com').subject,

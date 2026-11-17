@@ -160,7 +160,7 @@ flowchart LR
 - **Site:** every push to `main` runs the checks. When they all pass, the `deploy` job publishes `dist/` to Cloudflare Pages and records it under the repo's **production** environment. It needs two repository secrets: `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit) and `CLOUDFLARE_ACCOUNT_ID`.
 - **Headers:** [`public/_headers`](public/_headers) sets a strict Content Security Policy, HSTS and the other security headers. Hashed files under `/assets/` are cached for a year.
 - **Database and functions:** migrations and Edge Functions are deployed by hand with the Supabase CLI, not by CI. Migrations are applied one at a time with `supabase db push --linked`, after they are committed.
-- **Email:** until launch, the `EMAIL_ALLOWLIST` Edge Function secret limits app emails to a short list of addresses. At launch it changes to `*`.
+- **Email:** until launch, the `EMAIL_ALLOWLIST` Edge Function secret limits app emails to a short list of addresses. At launch it changes to `*`. Every email uses one branded frame (`brandedEmail` in `supabase/functions/send-notifications/notifications.ts`). `node scripts/write-auth-email-templates.ts` writes the same frame into `supabase/templates/` for the Supabase Auth emails, which are pasted into Authentication > Emails > Templates.
 
 ## Security
 
