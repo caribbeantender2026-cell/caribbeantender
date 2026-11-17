@@ -192,16 +192,27 @@
     @apply bg-cover bg-center;
   }
 
-  /* The home hero's photograph fades into the paper below instead of ending in a hard line. It is a
-     background layer, so it sits behind the demo and never covers it. */
-  .hills-backdrop.fades-to-paper {
-    background-image:
-      linear-gradient(to bottom, transparent calc(100% - 5rem), var(--paper) calc(100% - 0.5rem)),
-      linear-gradient(to bottom, rgb(0 23 58 / 0.78), rgb(0 23 58 / 0.4) 42%, rgb(0 23 58 / 0.6)),
-      url("../assets/photos/jamaica-hills.webp");
-    /* Sized to the box, the fade left one row of photo showing at the bottom edge in Chrome; 2px taller covers it. */
-    background-size: 100% calc(100% + 2px), cover, cover;
-    background-position: top, center, center;
+  /*
+   * The home hero's photograph eases into the paper below and holds it for the last 3rem, so no edge shows
+   * where the section ends. It is a layer of its own, behind the content (z-index -1 inside the section's
+   * own stacking context), so it never covers the demo. As a background layer it left a one-pixel line of
+   * photo at the bottom edge at some zoom levels (measured in Chrome at 100% and 125%); reaching a pixel
+   * past the edge covers that row. The middle stops are the paper colour (#f8f9fb) part-way, for an eased fade.
+   */
+  .fades-to-paper {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .fades-to-paper::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: -1px;
+    z-index: -1;
+    height: 8rem;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, rgb(248 249 251 / 0.65) 31.25%, rgb(248 249 251 / 0.92) 50%, var(--paper) 62.5%);
   }
 
   /* About Us body: the client's Markdown in a reading column, serif headings, the four principles as tiles. */

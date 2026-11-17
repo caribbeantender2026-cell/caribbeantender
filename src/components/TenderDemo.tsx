@@ -581,9 +581,10 @@ export function TenderDemo() {
             ? 'A demo of CaribbeanTender with sample data: a business posts a tender and publishes it; the bids stay sealed until closing, then open at once, and the business awards the tender.'
             : 'A demo of CaribbeanTender with sample data: a supplier finds a tender, submits a sealed bid and gets a receipt, then sees that it won.'
         }
-        className="rounded-t-2xl border border-b-0 border-white/25 bg-white/10 p-2 pb-0 shadow-[0_30px_80px_-20px_rgb(0_23_58/0.7)] backdrop-blur-md sm:p-3 sm:pb-0"
+        // The frame, glass edges included, fades out before the hero ends, over the hero's solid paper, so no edge shows.
+        className="rounded-t-2xl border border-b-0 border-white/25 bg-white/10 p-2 pb-0 shadow-[0_30px_80px_-20px_rgb(0_23_58/0.7)] backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_calc(100%-4.5rem),transparent_calc(100%-1rem))] sm:p-3 sm:pb-0"
       >
-        <div ref={windowRef} className="relative h-[520px] overflow-hidden rounded-t-lg bg-background text-left text-foreground select-none sm:h-[540px] lg:h-[600px]">
+        <div ref={windowRef} className="relative h-[520px] overflow-hidden rounded-t-lg bg-background text-left text-foreground select-none sm:h-[640px]">
           <div className="flex items-center justify-between gap-3 border-b bg-card px-4 py-2.5">
             <span className="hidden min-w-0 items-center gap-1.5 rounded-md bg-muted px-3 py-1 text-xs text-muted-foreground sm:flex">
               <LockIcon className="size-3 shrink-0" aria-hidden="true" />
@@ -596,8 +597,6 @@ export function TenderDemo() {
           <div key={`${flow}-${step.screen}`} inert className="px-4 pt-5 motion-safe:animate-fade-in sm:px-8 sm:pt-7">
             {screens[step.screen]()}
           </div>
-          {/* A short fade into the page colour, so the window's cut-off bottom edge doesn't show. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-b from-paper/0 to-paper" />
           {!prefersReducedMotion && <DemoPointer {...pointer} isClick={step.isClick === true} stepKey={`${flow}-${stepIndex}`} />}
         </div>
       </div>

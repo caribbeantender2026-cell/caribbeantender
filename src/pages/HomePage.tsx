@@ -56,7 +56,8 @@ export function HomePage() {
 
   return (
     <>
-      <section className="hills-backdrop fades-to-paper -mt-16 overflow-hidden text-white sm:-mt-[72px]">
+      {/* Clipped sideways only: a vertical clip cut the bottom fade a pixel short of the edge at some zoom levels. */}
+      <section className="hills-backdrop fades-to-paper -mt-16 overflow-x-clip text-white sm:-mt-[72px]">
         <div className={classNames(container, 'pt-28 sm:pt-[136px]')}>
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
             <h2 className="font-serif text-[52px] leading-[1.05] font-normal tracking-[-0.0125em] text-white sm:text-6xl lg:text-[72px]">eTendering System</h2>
