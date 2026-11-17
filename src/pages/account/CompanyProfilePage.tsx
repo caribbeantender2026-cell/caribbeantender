@@ -1,13 +1,13 @@
 /** The company profile form, shared by business and supplier accounts. */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAccount, type AccountType } from '../../auth/AccountContext.tsx';
 import { CategoryOptions } from '../../components/CategoryOptions.tsx';
 import { Notice } from '../../components/Notices.tsx';
+import { PageHeader } from '../../components/PageHeader.tsx';
 import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 
@@ -73,8 +73,16 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
 
   return (
     <>
+    <PageHeader
+      title="Company profile"
+      description={
+        accountType === 'business'
+          ? 'How your company appears on the tenders you post.'
+          : 'How your company appears on your bids. Your category decides which new tenders you are emailed about.'
+      }
+      back={{ to: dashboardPath, label: accountType === 'business' ? 'My tenders' : 'My bids' }}
+    />
     <div className="card form">
-      <h2>{accountType === 'business' ? 'Business Company Profile' : 'Supplier Profile'}</h2>
       <form onSubmit={form.handleSubmit(saveProfile)} noValidate>
         <label htmlFor="companyName">Company Name</label>
         <input id="companyName" {...form.register('companyName')} />
@@ -109,8 +117,7 @@ export function CompanyProfilePage({ accountType }: { accountType: AccountType }
 
         {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
         <div className="actions">
-          <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : 'Save Profile'}</button>
-          <Link className="btn gold" to={dashboardPath}>Back to Dashboard</Link>
+          <button className="btn" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : 'Save profile'}</button>
         </div>
       </form>
     </div>

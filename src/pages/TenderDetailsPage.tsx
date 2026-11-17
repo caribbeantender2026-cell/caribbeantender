@@ -49,12 +49,10 @@ export function TenderDetailsPage() {
   const requirementsForm = tenderQuery.data.requirementsForm;
   return (
     <>
-      <Button asChild variant="ghost" size="sm" className="mb-3 -ml-3">
-        <Link to="/tenders">
-          <ArrowLeftIcon aria-hidden="true" />
-          Back to open tenders
-        </Link>
-      </Button>
+      <Link to="/tenders" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 no-underline hover:text-ink hover:no-underline">
+        <ArrowLeftIcon className="size-4" aria-hidden="true" />
+        Back to open tenders
+      </Link>
       <TenderView
         tender={tender}
         now={now}

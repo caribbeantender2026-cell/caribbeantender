@@ -10,14 +10,25 @@ import { DocumentList, type RecordedDocument } from '../../components/DocumentLi
 import { AttachedForm } from '../../components/FormFields.tsx';
 import type { FormData } from '../../lib/forms.ts';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
+import { PageHeader } from '../../components/PageHeader.tsx';
 import { formatAmount } from '../../lib/queries.ts';
-import { tenderPhase, tenderPhaseDisplay } from '../../lib/rules.ts';
+import { tenderPhase, tenderPhaseDisplay, type TenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime, jamaicaLocalToUtc, utcToJamaicaLocal } from '../../lib/time.ts';
 import { useTender } from '../TenderDetailsPage.tsx';
 import { listDraftFiles } from './TenderFormPage.tsx';
 
 const maximumReasonLength = 1000;
+
+// What the business can do next, in plain words, for each phase of its tender.
+const phaseGuidance: Record<TenderPhase, string> = {
+  draft: 'A draft: only you can see it. Edit it and attach the requirements form, then publish it to open it for bids.',
+  'accepting-bids': 'Open for bids until the closing time. Bids stay sealed until then; you can only extend the closing time or cancel.',
+  'awaiting-opening': 'The closing time has passed. The bids open within a minute.',
+  opened: 'Closed. Every bid is below. Award the one you choose; the others are marked unsuccessful.',
+  awarded: 'Awarded. The winning bid and the others are below.',
+  cancelled: 'Cancelled. Suppliers see the reason you gave.',
+};
 
 type BidDocument = { document_id: string; file_name: string; size_bytes: number; document_role: RecordedDocument['document_role'] };
 
@@ -131,7 +142,7 @@ export function TenderManagePage() {
 
   return (
     <>
-      <h2>{tender.title}</h2>
+      <PageHeader title={tender.title} description={phaseGuidance[phase]} back={{ to: '/business', label: 'My tenders' }} />
       <div className="card">
         <p>
           <span className={`badge ${tenderPhaseDisplay[phase].badgeStyle}`}>{tenderPhaseDisplay[phase].label}</span>{' '}

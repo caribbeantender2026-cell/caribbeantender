@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { ChevronLeftIcon, ChevronRightIcon, Clock3Icon, SearchXIcon } from 'lucide-react';
 import { CategoryOptions } from '../components/CategoryOptions.tsx';
 import { ErrorNotice, Loading } from '../components/Notices.tsx';
+import { PageHeader } from '../components/PageHeader.tsx';
 import { Badge } from '../components/ui/badge.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { Card } from '../components/ui/card.tsx';
@@ -41,25 +42,27 @@ export function TendersPage() {
   const categoryName = (id: number | null) => (id !== null ? (categoryNames.get(id) ?? 'Uncategorised') : 'Uncategorised');
   return (
     <>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-navy-dark sm:text-3xl">Open tenders</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Soonest closing first. Closing times are in Jamaica time.</p>
-        </div>
-        <div className="grid w-full gap-2 sm:w-64">
-          <Label htmlFor="categoryFilter">Category</Label>
-          <NativeSelect id="categoryFilter" value={categoryId ?? ''} onChange={(event) => show(event.target.value ? Number(event.target.value) : null, 0)}>
-            <option value="">All categories</option>
-            <CategoryOptions categories={categoriesQuery.data ?? []} />
-          </NativeSelect>
-        </div>
-      </div>
+      <PageHeader
+        title="Open tenders"
+        description="Tenders taking bids now, soonest closing first. Open one to read it and download its documents. All times are Jamaica time."
+        actions={
+          <div className="grid w-full gap-2 sm:w-64">
+            <Label htmlFor="categoryFilter">Category</Label>
+            <NativeSelect id="categoryFilter" value={categoryId ?? ''} onChange={(event) => show(event.target.value ? Number(event.target.value) : null, 0)}>
+              <option value="">All categories</option>
+              <CategoryOptions categories={categoriesQuery.data ?? []} />
+            </NativeSelect>
+          </div>
+        }
+      />
       {tendersQuery.isPending && <Loading />}
       {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
       {tendersQuery.data && tenders.length === 0 && (
         <Card className="items-center py-14 text-center">
           <SearchXIcon className="size-8 text-muted-foreground" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">No open tenders{categoryId !== null ? ' in this category' : ''}.</p>
+          <p className="text-sm text-muted-foreground">
+            No open tenders{categoryId !== null ? ' in this category right now. Try All categories.' : ' right now. New tenders appear here as soon as they are published.'}
+          </p>
         </Card>
       )}
       {tenders.length > 0 && (

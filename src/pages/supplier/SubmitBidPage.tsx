@@ -4,11 +4,12 @@
  * files and sets the submission time. A bid can't be changed afterwards.
  */
 import { useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { FormFields, useFormDefinition } from '../../components/FormFields.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
+import { PageHeader } from '../../components/PageHeader.tsx';
 import { BidReceipt } from '../../components/TenderView.tsx';
 import type { Json } from '../../lib/database.types.ts';
 import { formProblems, type FormData } from '../../lib/forms.ts';
@@ -128,10 +129,11 @@ export function SubmitBidPage() {
   }
 
   const header = (
-    <>
-      <h2>Bid: {tender.title}</h2>
-      <p>Closes {formatJamaicaDateTime(tender.closes_at)} Jamaica time. <Link to={`/tenders/${tender.id}`}>Tender details</Link></p>
-    </>
+    <PageHeader
+      title={`Bid: ${tender.title}`}
+      description={`Closes ${formatJamaicaDateTime(tender.closes_at)} Jamaica time. Your bid is sealed: nobody, not even the business, sees it before then, and it can't be changed once submitted.`}
+      back={{ to: `/tenders/${tender.id}`, label: 'Back to the tender' }}
+    />
   );
   if (existingBid) {
     return <>{header}<BidReceipt amount={existingBid.amount} currency={existingBid.currency} submittedAt={existingBid.submitted_at} /></>;

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
+import { PageHeader } from '../../components/PageHeader.tsx';
 import type { Enums } from '../../lib/database.types.ts';
 import { tenderPhaseDisplay, tenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
@@ -229,7 +230,7 @@ export function AdminPage() {
   if (assuranceQuery.isError) return <ErrorNotice error={assuranceQuery.error} />;
   return (
     <>
-      <h2>Admin</h2>
+      <PageHeader title="Admin" description="Find users and tenders, deactivate or reactivate a user, and cancel a tender. You confirm it's you with your authenticator app first." />
       {assuranceQuery.data !== 'aal2' ? (
         <MultiFactorGate onVerified={() => void assuranceQuery.refetch()} />
       ) : (

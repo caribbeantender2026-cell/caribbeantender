@@ -1,47 +1,61 @@
 /**
- * The site frame (top bar, brand bar, navigation, footer) and the layouts for public, business and
- * supplier pages. Same structure and colours as the original site, built with shadcn/ui components.
+ * The one frame every page shares: a header with the links for who is signed in (Home and About for
+ * visitors), an account menu, the page, and the footer. The header sits clear over the photograph on the
+ * home, About and sign-in pages until the page scrolls, and is see-through paper after that.
  */
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { ArrowLeftRightIcon, Building2Icon, CompassIcon, LayoutDashboardIcon, LogOutIcon, PlusIcon } from 'lucide-react';
+import { lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
+import { ArrowLeftRightIcon, Building2Icon, ChevronDownIcon, CompassIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PlusIcon, type LucideIcon } from 'lucide-react';
 import { createAccount, useAccount, type AccountType } from '../auth/AccountContext.tsx';
 import { classNames } from '../lib/classNames.ts';
 import { configurationProblem, errorMessage, supportEmail } from '../lib/supabase.ts';
-import { jamaicaTimeZone } from '../lib/time.ts';
 import logoFullLight from '../assets/brand/logo-full-light.webp';
 import logoMarkLight from '../assets/brand/logo-mark-light.webp';
 import logoMark from '../assets/brand/logo-mark.webp';
 import { Loading, Notice } from './Notices.tsx';
-import { Badge } from './ui/badge.tsx';
-import { Button } from './ui/button.tsx';
-import { Card } from './ui/card.tsx';
 
 // Loaded only when the tour opens, so it adds nothing to every other page.
 const Tour = lazy(async () => ({ default: (await import('./Tour.tsx')).Tour }));
 
-type NavigationLink = { to: string; label: string };
+type NavigationLink = { to: string; label: string; isActive: (pathname: string) => boolean };
 
 const dashboardPath: Record<AccountType, string> = { business: '/business', supplier: '/supplier' };
 const accountLabel: Record<AccountType, string> = { business: 'Business', supplier: 'Supplier' };
+// What the other account type is for, shown under "Add a … account" in the menu.
+const otherAccountPurpose: Record<AccountType, string> = { business: 'To post your own tenders', supplier: 'To bid on tenders' };
 
-const businessLinks: NavigationLink[] = [
-  { to: '/tenders', label: 'Open tenders' },
-  { to: '/business', label: 'My tenders' },
-  { to: '/business/tenders/new', label: 'Post a tender' },
-  { to: '/forms', label: 'Forms' },
-  { to: '/business/profile', label: 'Company profile' },
+const exactly = (path: string) => (pathname: string) => pathname === path;
+const startsWith = (path: string) => (pathname: string) => pathname.startsWith(path);
+const openTendersLink: NavigationLink = { to: '/tenders', label: 'Open tenders', isActive: startsWith('/tenders') };
+const formsLink: NavigationLink = { to: '/forms', label: 'Forms', isActive: startsWith('/forms') };
+// The same links on every page: they depend only on who is signed in, never on the page.
+const linksByAccountType: Record<AccountType, NavigationLink[]> = {
+  business: [
+    { to: '/business', label: 'My tenders', isActive: (pathname) => pathname === '/business' || pathname.startsWith('/business/tenders') },
+    openTendersLink,
+    formsLink,
+  ],
+  supplier: [openTendersLink, { to: '/supplier', label: 'My bids', isActive: exactly('/supplier') }, formsLink],
+};
+const visitorLinks: NavigationLink[] = [
+  { to: '/', label: 'Home', isActive: exactly('/') },
+  { to: '/about', label: 'About us', isActive: exactly('/about') },
 ];
-const supplierLinks: NavigationLink[] = [
-  { to: '/tenders', label: 'Open tenders' },
-  { to: '/supplier', label: 'My bids' },
-  { to: '/forms', label: 'Forms' },
-  { to: '/supplier/profile', label: 'Supplier profile' },
-];
+const adminLink: NavigationLink = { to: '/admin', label: 'Admin', isActive: exactly('/admin') };
 
-function todayInJamaica(): string {
-  return new Intl.DateTimeFormat('en-JM', { timeZone: jamaicaTimeZone, dateStyle: 'full' }).format(new Date());
-}
+const container = 'mx-auto w-full max-w-[1440px] px-4 sm:px-8';
+const headerButton = 'cursor-pointer rounded-button px-3 py-[9px] text-sm leading-5 font-medium whitespace-nowrap no-underline transition-colors duration-150 hover:no-underline sm:px-4 md:py-[7px]';
+const menuItem = 'flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-ink no-underline transition-colors hover:bg-ink/5 hover:no-underline';
+const menuGapPixels = 8;
+
+// Pages that open with the photograph behind the header.
+const photoTopPaths = new Set(['/', '/about']);
+// Pages that are a form card over the photograph, which then runs behind the header.
+const formPhotoPaths = new Set(['/login', '/register', '/forgot-password', '/reset-password']);
+// Pages laid out by the page itself, edge to edge; every other page sits in the app's reading column.
+const fullWidthPaths = new Set(['/', '/about', '/privacy', '/terms', ...formPhotoPaths]);
+
+const rememberedAccountTypeKey = 'caribbeantender.account-type';
 
 /** Up to two initials from a company name, for the account avatar. */
 function initials(name: string): string {
@@ -49,10 +63,40 @@ function initials(name: string): string {
   return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join('') || 'CT';
 }
 
+/** The account type the person last worked in, if the browser kept it. */
+function rememberedAccountType(): AccountType | null {
+  try {
+    const value = localStorage.getItem(rememberedAccountTypeKey);
+    return value === 'business' || value === 'supplier' ? value : null;
+  } catch {
+    // Private windows can refuse storage; the frame then uses the account the person has.
+    return null;
+  }
+}
+
+/**
+ * Which of the person's accounts the frame shows: the page's own type on business and supplier pages,
+ * else the one they last worked in, else the one they have. Null for visitors and accounts with neither.
+ */
+function useActiveAccountType(pageAccountType: AccountType | undefined): AccountType | null {
+  const { businessProfile, supplierProfile } = useAccount();
+  useEffect(() => {
+    if (!pageAccountType) return;
+    try {
+      localStorage.setItem(rememberedAccountTypeKey, pageAccountType);
+    } catch {
+      // Not remembering only means shared pages fall back to the account the person has.
+    }
+  }, [pageAccountType]);
+  const hasAccount = (accountType: AccountType) => (accountType === 'business' ? businessProfile : supplierProfile) !== null;
+  const candidates = [pageAccountType, rememberedAccountType(), 'business', 'supplier'] as const;
+  return candidates.find((candidate): candidate is AccountType => candidate !== undefined && candidate !== null && hasAccount(candidate)) ?? null;
+}
+
 /** The client's CT monogram and the name, as one link home. On dark backgrounds the navy in the mark turns white. */
 function Wordmark({ tone }: { tone: 'ink' | 'white' }) {
   return (
-    <Link to="/" className={classNames('flex items-center gap-2.5 no-underline hover:no-underline', tone === 'ink' ? 'text-ink' : 'text-white')}>
+    <Link to="/" className={classNames('flex shrink-0 items-center gap-2.5 no-underline hover:no-underline', tone === 'ink' ? 'text-ink' : 'text-white')}>
       <img src={tone === 'ink' ? logoMark : logoMarkLight} alt="" width={240} height={134} className="h-8 w-auto shrink-0 sm:h-9" />
       <span className="font-serif text-[22px] leading-none tracking-[-0.01em] sm:text-[26px]" translate="no">Caribbean Tender</span>
     </Link>
@@ -68,14 +112,6 @@ function SkipLink() {
   );
 }
 
-const marketingContainer = 'mx-auto w-full max-w-[1440px] px-4 sm:px-8';
-const headerButton = 'cursor-pointer rounded-button px-3 py-[9px] text-sm leading-5 font-medium whitespace-nowrap no-underline transition-colors duration-150 hover:no-underline sm:px-4 md:py-[7px]';
-
-// Pages that open with the photograph behind the header.
-const photoTopPaths = new Set(['/', '/about']);
-// Pages that are a form card over the photograph, which then runs behind the header.
-const formPhotoPaths = new Set(['/login', '/register', '/forgot-password', '/reset-password']);
-
 /** A marker for the top of the page, and whether it is still in view. Lets the header sit clear over a photograph until the page scrolls. */
 function useIsAtTop(): [RefObject<HTMLDivElement | null>, boolean] {
   const topMarker = useRef<HTMLDivElement>(null);
@@ -89,19 +125,180 @@ function useIsAtTop(): [RefObject<HTMLDivElement | null>, boolean] {
   return [topMarker, isAtTop];
 }
 
+/** One row of the account menu: an icon, a label and an optional line under it. */
+function MenuRow({ icon: Icon, label, detail }: { icon: LucideIcon; label: string; detail?: string }) {
+  return (
+    <>
+      <Icon className="size-4 shrink-0 text-ink/60" aria-hidden="true" />
+      <span className="min-w-0">
+        <span className="block">{label}</span>
+        {detail && <span className="block text-xs text-ink/60">{detail}</span>}
+      </span>
+    </>
+  );
+}
+
 /**
- * The visitor's frame, after harvey.ai: one header bar, full-width content, a dark footer. On the homepage
- * and the sign-in pages the header sits clear over the photograph until the page scrolls.
+ * The person's menu, opened from their name in the header: which account they are in, its company
+ * profile, the tour, their other account type, help and log out. On phones it also holds the page links.
+ * A native popover, so clicking outside or pressing Escape closes it.
  */
-function MarketingFrame({ children }: { children: ReactNode }) {
-  const { session, signOut } = useAccount();
+function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountType: AccountType | null; links: NavigationLink[]; isOverPhoto: boolean; onTakeTour: () => void }) {
+  const { session, businessProfile, supplierProfile, refreshAccounts, signOut } = useAccount();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const menuId = useId();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, right: 0 });
+  const [problem, setProblem] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const profile = accountType === 'business' ? businessProfile : accountType === 'supplier' ? supplierProfile : null;
+  const companyName = profile?.company_name || session?.user.email || 'Your account';
+  const otherType: AccountType | null = accountType === 'business' ? 'supplier' : accountType === 'supplier' ? 'business' : null;
+  const hasOtherAccount = otherType === 'business' ? businessProfile !== null : otherType === 'supplier' ? supplierProfile !== null : false;
+  const closeMenu = () => menuRef.current?.hidePopover();
+
+  async function addOtherAccount() {
+    if (!session || !otherType) return;
+    setIsCreating(true);
+    setProblem(null);
+    try {
+      await createAccount(otherType, session);
+      await refreshAccounts();
+      closeMenu();
+      void navigate(`${dashboardPath[otherType]}/profile`);
+    } catch (error) {
+      setProblem(`Unable to add the ${accountLabel[otherType].toLowerCase()} account: ${errorMessage(error)}`);
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        popoverTarget={menuId}
+        aria-label={`Account menu for ${companyName}`}
+        // ponytail: placed when opened; resizing the window while it is open leaves it where it was until reopened.
+        onClick={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          setPosition({ top: box.bottom + menuGapPixels, right: window.innerWidth - box.right });
+        }}
+        className={classNames(
+          'flex cursor-pointer items-center gap-2 rounded-button border p-1 pr-2.5 text-sm font-medium transition-colors duration-200',
+          isOverPhoto ? 'border-white/25 bg-white/10 text-white backdrop-blur-md hover:bg-white/15' : 'border-ink/35 bg-white/40 text-ink hover:bg-white/70',
+        )}
+      >
+        <span className={classNames('grid size-8 place-items-center rounded-[10px] text-xs font-semibold', isOverPhoto ? 'bg-white text-ink' : 'bg-ink text-white')} aria-hidden="true">
+          {initials(companyName)}
+        </span>
+        <span className="hidden max-w-44 truncate lg:block">{companyName}</span>
+        <ChevronDownIcon className="hidden size-4 md:block" aria-hidden="true" />
+        <MenuIcon className="size-4 md:hidden" aria-hidden="true" />
+      </button>
+      <div
+        ref={menuRef}
+        id={menuId}
+        popover="auto"
+        className="fixed inset-auto m-0 w-72 max-w-[calc(100vw-2rem)] rounded-xl border bg-card p-1.5 text-ink shadow-[0_16px_40px_-12px_rgb(0_23_58/0.35)]"
+        style={{ top: position.top, right: position.right }}
+      >
+        <div className="grid gap-0.5">
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-ink text-xs font-semibold text-white" aria-hidden="true">{initials(companyName)}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{companyName}</span>
+              <span className="block text-xs text-ink/60">{accountType ? `${accountLabel[accountType]} account` : session?.user.email}</span>
+            </span>
+          </div>
+          {/* On phones the header has no room for the page links, so they live here. */}
+          <div className="grid gap-0.5 border-t pt-1.5 md:hidden">
+            {links.map((link) => (
+              <Link key={link.to} to={link.to} onClick={closeMenu} aria-current={link.isActive(pathname) ? 'page' : undefined} className={classNames(menuItem, 'font-medium', link.isActive(pathname) && 'bg-ink/5')}>
+                {link.label}
+              </Link>
+            ))}
+            {accountType === 'business' && (
+              <Link to="/business/tenders/new" onClick={closeMenu} className={classNames(menuItem, 'font-medium')}>
+                <MenuRow icon={PlusIcon} label="Post a tender" />
+              </Link>
+            )}
+          </div>
+          {accountType && (
+            <div className="grid gap-0.5 border-t pt-1.5">
+              <Link to={`${dashboardPath[accountType]}/profile`} onClick={closeMenu} className={menuItem}>
+                <MenuRow icon={Building2Icon} label="Company profile" />
+              </Link>
+              <button
+                type="button"
+                className={menuItem}
+                onClick={() => {
+                  closeMenu();
+                  onTakeTour();
+                }}
+              >
+                <MenuRow icon={CompassIcon} label="Take the tour" />
+              </button>
+              {otherType &&
+                (hasOtherAccount ? (
+                  <Link to={dashboardPath[otherType]} onClick={closeMenu} className={menuItem}>
+                    <MenuRow icon={ArrowLeftRightIcon} label={`Switch to your ${accountLabel[otherType].toLowerCase()} account`} />
+                  </Link>
+                ) : (
+                  <button type="button" className={menuItem} disabled={isCreating} onClick={() => void addOtherAccount()}>
+                    <MenuRow icon={PlusIcon} label={isCreating ? 'Please wait…' : `Add a ${accountLabel[otherType].toLowerCase()} account`} detail={otherAccountPurpose[otherType]} />
+                  </button>
+                ))}
+            </div>
+          )}
+          <div className="grid gap-0.5 border-t pt-1.5">
+            <a href={`mailto:${supportEmail}`} className={menuItem}>
+              <MenuRow icon={LifeBuoyIcon} label="Help" detail={supportEmail} />
+            </a>
+            <button
+              type="button"
+              className={menuItem}
+              onClick={async () => {
+                closeMenu();
+                await signOut();
+                void navigate('/');
+              }}
+            >
+              <MenuRow icon={LogOutIcon} label="Log out" />
+            </button>
+          </div>
+          {problem && <p className="px-3 py-2 text-sm text-destructive">{problem}</p>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** The frame itself. Business and supplier pages pass their account type, which also opens the tour on a first visit. */
+function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountType; children: ReactNode }) {
+  const { session, profile: personProfile, staffRole, refreshAccounts } = useAccount();
+  const { pathname } = useLocation();
   const [topMarker, isAtTop] = useIsAtTop();
+  const accountType = useActiveAccountType(pageAccountType);
+  const [isTourRequested, setIsTourRequested] = useState(false);
   const hasFormPhoto = formPhotoPaths.has(pathname);
   const isOverPhoto = (photoTopPaths.has(pathname) || hasFormPhoto) && isAtTop;
-  const linkTone = isOverPhoto ? 'text-white hover:text-white/75' : 'text-ink hover:text-ink/70';
-  // The two account buttons sit joined in one see-through group, like the home page demo's tabs.
+  const isFullWidth = fullWidthPaths.has(pathname);
+
+  const signedInLinks = accountType ? linksByAccountType[accountType] : [openTendersLink, formsLink];
+  const links = session ? [...signedInLinks, ...(staffRole ? [adminLink] : [])] : visitorLinks;
+  // The tour opens by itself on a person's first visit to their business or supplier pages, and from the menu after that.
+  const completedTours = personProfile?.onboarding_completed;
+  const hasSeenTour = (type: AccountType) => typeof completedTours === 'object' && completedTours !== null && !Array.isArray(completedTours) && type in completedTours;
+  const isFirstVisit = accountType !== null && pageAccountType === accountType && personProfile !== null && !hasSeenTour(accountType);
+  const isTourOpen = accountType !== null && (isTourRequested || isFirstVisit);
+
+  const linkTone = (isActive: boolean) =>
+    isOverPhoto
+      ? classNames(isActive ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/10 hover:text-white')
+      : classNames(isActive ? 'bg-ink/[0.07] text-ink' : 'text-ink/70 hover:bg-ink/5 hover:text-ink');
+  // Sign in and Sign up sit joined in one see-through group, like the home page demo's tabs.
   const buttonGroup = isOverPhoto ? 'border-white/25 bg-white/10 backdrop-blur-md' : 'border-ink/35 bg-white/40';
   const outlineButton = classNames(headerButton, isOverPhoto ? 'text-white hover:bg-white/10' : 'text-ink hover:bg-ink/10');
   const solidButton = classNames(headerButton, isOverPhoto ? 'bg-white text-ink hover:bg-white/90' : 'bg-ink text-white hover:bg-ink/85');
@@ -110,42 +307,42 @@ function MarketingFrame({ children }: { children: ReactNode }) {
     <div className="relative flex min-h-dvh flex-col bg-paper text-ink">
       <div ref={topMarker} className="pointer-events-none absolute top-0 left-0 h-10 w-px" aria-hidden="true" />
       <SkipLink />
-      {configurationProblem && (
-        <div className={marketingContainer}>
-          <Notice tone="error">{configurationProblem}</Notice>
-        </div>
-      )}
       <header className={classNames('sticky top-0 z-30 transition-colors duration-200', !isOverPhoto && 'bg-paper/60 shadow-[0_1px_0_rgb(0_32_79/0.08)] backdrop-blur-xl backdrop-saturate-150')}>
-        <div className={classNames(marketingContainer, 'flex h-16 items-center gap-4 sm:h-[72px] sm:gap-10')}>
+        <div className={classNames(container, 'flex h-16 items-center gap-4 sm:h-[72px] lg:gap-10')}>
           <h1 className="contents">
             <Wordmark tone={isOverPhoto ? 'white' : 'ink'} />
           </h1>
           <nav aria-label="Main" className="hidden md:block">
-            <ul className="flex gap-8 text-sm font-medium">
-              <li><NavLink to="/" end className={classNames(linkTone, 'no-underline hover:no-underline')}>Home</NavLink></li>
-              <li><NavLink to="/about" end className={classNames(linkTone, 'no-underline hover:no-underline')}>About us</NavLink></li>
+            <ul className="flex items-center gap-1 text-sm font-medium">
+              {links.map((link) => (
+                <li key={link.to}>
+                  <Link
+                    to={link.to}
+                    aria-current={link.isActive(pathname) ? 'page' : undefined}
+                    className={classNames('block rounded-button px-3 py-2 no-underline transition-colors duration-150 hover:no-underline', linkTone(link.isActive(pathname)))}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </nav>
-          <div className={classNames('ml-auto flex shrink-0 items-center gap-1 rounded-button border p-1 transition-colors duration-200', buttonGroup)}>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             {session ? (
               <>
-                <button
-                  type="button"
-                  className={outlineButton}
-                  onClick={async () => {
-                    await signOut();
-                    void navigate('/');
-                  }}
-                >
-                  Logout
-                </button>
-                <Link to="/tenders" className={solidButton}>Open tenders</Link>
+                {accountType === 'business' && (
+                  <Link to="/business/tenders/new" className={classNames(solidButton, 'hidden items-center gap-1.5 sm:inline-flex')}>
+                    <PlusIcon className="size-4" aria-hidden="true" />
+                    Post a tender
+                  </Link>
+                )}
+                <AccountMenu accountType={accountType} links={links} isOverPhoto={isOverPhoto} onTakeTour={() => setIsTourRequested(true)} />
               </>
             ) : (
-              <>
+              <div className={classNames('flex items-center gap-1 rounded-button border p-1 transition-colors duration-200', buttonGroup)}>
                 <Link to="/login" className={outlineButton}>Sign in</Link>
                 <Link to="/register" className={solidButton}>Sign up</Link>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -153,23 +350,38 @@ function MarketingFrame({ children }: { children: ReactNode }) {
       <main
         id="main"
         className={classNames(
-          'marketing-main flex-1',
+          'flex-1',
+          // App pages share the header's column, so titles line up under the logo.
+          isFullWidth ? 'marketing-main' : classNames(container, 'pt-10 pb-20 sm:pt-14'),
           // The photograph fills the first screen, from behind the header down; the footer follows below it.
           hasFormPhoto && 'hills-backdrop -mt-16 grid min-h-dvh place-items-center pt-24 pb-12 sm:-mt-[72px] sm:pt-28 sm:pb-16',
         )}
       >
+        {configurationProblem && <Notice tone="error">{configurationProblem}</Notice>}
+        {session && personProfile && !personProfile.is_active && (
+          <Notice tone="error">This account has been deactivated, so you can look but not post, bid or upload. Contact {supportEmail} for help.</Notice>
+        )}
         {children}
       </main>
       <footer className="bg-midnight text-white">
-        <div className={classNames(marketingContainer, 'grid gap-10 pt-16 pb-12 md:grid-cols-[1fr_auto_auto_auto] md:gap-24')}>
+        <div className={classNames(container, 'grid gap-10 pt-16 pb-12 md:grid-cols-[1fr_auto_auto_auto] md:gap-24')}>
           <Link to="/" className="self-start" aria-label="Caribbean Tender home">
             <img src={logoFullLight} alt="Caribbean Tender, Private Procurement Platform" width={720} height={421} className="h-auto w-56" />
           </Link>
           <nav aria-label="Platform" className="grid content-start gap-3 text-sm font-medium">
             <p className="font-normal text-white/50">Platform</p>
             <Link to="/about" className="text-white no-underline hover:text-white/70 hover:no-underline">About us</Link>
-            <Link to="/register" className="text-white no-underline hover:text-white/70 hover:no-underline">Create an account</Link>
-            <Link to="/login" className="text-white no-underline hover:text-white/70 hover:no-underline">Sign in</Link>
+            {session ? (
+              <>
+                <Link to="/tenders" className="text-white no-underline hover:text-white/70 hover:no-underline">Open tenders</Link>
+                <Link to="/forms" className="text-white no-underline hover:text-white/70 hover:no-underline">Forms</Link>
+              </>
+            ) : (
+              <>
+                <Link to="/register" className="text-white no-underline hover:text-white/70 hover:no-underline">Create an account</Link>
+                <Link to="/login" className="text-white no-underline hover:text-white/70 hover:no-underline">Sign in</Link>
+              </>
+            )}
           </nav>
           <nav aria-label="Legal" className="grid content-start gap-3 text-sm font-medium">
             <p className="font-normal text-white/50">Legal</p>
@@ -181,212 +393,11 @@ function MarketingFrame({ children }: { children: ReactNode }) {
             <span>{supportEmail}</span>
           </div>
         </div>
-        <p className={classNames(marketingContainer, 'border-t border-white/15 py-6 text-sm text-white/50')}>
+        <p className={classNames(container, 'border-t border-white/15 py-6 text-sm text-white/50')}>
           Copyright © {new Date().getFullYear()} CaribbeanTender. Every deadline is in Jamaica time.
         </p>
       </footer>
-    </div>
-  );
-}
-
-/** The page chrome every screen shares: top bar, brand bar with the logo, navy navigation and footer. Visitors get the marketing frame. */
-function SiteFrame({ links, brandAside, children }: { links: NavigationLink[]; brandAside: ReactNode; children: ReactNode }) {
-  const { session, profile, staffRole } = useAccount();
-  const { pathname } = useLocation();
-  // The homepage is the same for everyone, so it always gets the visitor's frame.
-  if (!session || pathname === '/') return <MarketingFrame>{children}</MarketingFrame>;
-  const allLinks = staffRole ? [...links, { to: '/admin', label: 'Admin' }] : links;
-  return (
-    <div className="flex min-h-dvh flex-col">
-      <SkipLink />
-      <div className="bg-navy-dark text-xs text-white/80">
-        <div className="wrap flex h-8 items-center justify-between gap-4">
-          <span>Caribbean Tender Procurement Marketplace</span>
-          <span className="hidden sm:inline">Assistance: {supportEmail}</span>
-        </div>
-      </div>
-      <header className="border-b-[3px] border-gold bg-card">
-        <div className="wrap flex h-[72px] items-center justify-between gap-4">
-          <Link to="/" className="flex min-w-0 items-center gap-3 no-underline hover:no-underline">
-            <img src={logoMark} alt="" width={240} height={134} className="h-10 w-auto shrink-0" />
-            <span className="min-w-0 leading-tight">
-              <h1 className="text-lg font-bold tracking-tight text-primary sm:text-xl" translate="no">Caribbean Tender</h1>
-              <span className="hidden text-sm text-muted-foreground md:block">Electronic Tendering for Private Sector Businesses and Suppliers</span>
-            </span>
-          </Link>
-          <div className="flex shrink-0 items-center gap-2">{brandAside}</div>
-        </div>
-      </header>
-      <nav className="bg-primary" aria-label="Main">
-        <div className="wrap flex items-center justify-between gap-4">
-          <ul className="-mx-2 flex gap-1 overflow-x-auto py-2">
-            {allLinks.map((link) => (
-              <li key={link.to}>
-                <NavLink
-                  to={link.to}
-                  end
-                  className={({ isActive }) =>
-                    classNames(
-                      'block rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap text-white/85 no-underline transition-colors hover:bg-white/10 hover:text-white hover:no-underline',
-                      isActive && 'bg-gold text-navy-dark hover:bg-gold hover:text-navy-dark',
-                    )
-                  }
-                >
-                  {link.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-          <span className="hidden text-xs whitespace-nowrap text-white/70 lg:block">{todayInJamaica()}</span>
-        </div>
-      </nav>
-      <main id="main" className="wrap flex-1 py-8">
-        {configurationProblem && <Notice tone="error">{configurationProblem}</Notice>}
-        {profile && !profile.is_active && (
-          <Notice tone="error">This account has been deactivated, so you can look but not post, bid or upload. Contact {supportEmail} for help.</Notice>
-        )}
-        {children}
-      </main>
-      <footer className="bg-navy-dark text-sm text-white/75">
-        <div className="wrap flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
-          <span>© {new Date().getFullYear()} CaribbeanTender</span>
-          <nav className="flex flex-wrap gap-x-5 gap-y-1" aria-label="Footer">
-            <Link to="/about" className="text-white/85 hover:text-white">About us</Link>
-            <Link to="/privacy" className="text-white/85 hover:text-white">Privacy Policy</Link>
-            <Link to="/terms" className="text-white/85 hover:text-white">Terms of Service</Link>
-          </nav>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-/** Layout for pages anyone can see. Signed-in people get links to their dashboards; visitors get Sign in and Sign up. */
-export function PublicLayout() {
-  const { session, businessProfile, supplierProfile, signOut } = useAccount();
-  const navigate = useNavigate();
-  const links: NavigationLink[] = [{ to: '/', label: 'Home' }, { to: '/about', label: 'About us' }];
-  if (session) links.push({ to: '/tenders', label: 'Open tenders' });
-  if (businessProfile) links.push({ to: '/business', label: 'My tenders' });
-  if (supplierProfile) links.push({ to: '/supplier', label: 'My bids' });
-
-  const brandAside = session ? (
-    <Button
-      variant="outline"
-      size="sm"
-      type="button"
-      onClick={async () => {
-        await signOut();
-        void navigate('/');
-      }}
-    >
-      <LogOutIcon aria-hidden="true" />
-      Logout
-    </Button>
-  ) : (
-    <>
-      <Button asChild variant="outline" size="sm">
-        <Link to="/login">Sign in</Link>
-      </Button>
-      <Button asChild variant="gold" size="sm">
-        <Link to="/register">Sign up</Link>
-      </Button>
-    </>
-  );
-
-  return (
-    <SiteFrame links={links} brandAside={brandAside}>
-      <Outlet />
-    </SiteFrame>
-  );
-}
-
-/** "Signed in as" card with the account switcher, the tour and logout, at the top of every dashboard page. */
-function ProfileHeader({ accountType }: { accountType: AccountType }) {
-  const { session, profile: personProfile, businessProfile, supplierProfile, refreshAccounts, signOut } = useAccount();
-  // The tour opens by itself on a person's first visit as this account type, and from the button after that.
-  const [isTourRequested, setIsTourRequested] = useState(false);
-  const completedTours = personProfile?.onboarding_completed;
-  const hasSeenTour = typeof completedTours === 'object' && completedTours !== null && !Array.isArray(completedTours) && accountType in completedTours;
-  const isTourOpen = isTourRequested || (personProfile !== null && !hasSeenTour);
-  const navigate = useNavigate();
-  const [problem, setProblem] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const profile = accountType === 'business' ? businessProfile : supplierProfile;
-  const otherType: AccountType = accountType === 'business' ? 'supplier' : 'business';
-  const hasOtherAccount = otherType === 'business' ? businessProfile !== null : supplierProfile !== null;
-  const companyName = profile?.company_name || `${accountLabel[accountType]} Name`;
-
-  async function createOtherAccount() {
-    if (!session) return;
-    setIsCreating(true);
-    setProblem(null);
-    try {
-      await createAccount(otherType, session);
-      await refreshAccounts();
-      void navigate(`${dashboardPath[otherType]}/profile`);
-    } catch (error) {
-      setProblem(`Unable to create the ${accountLabel[otherType]} account: ${errorMessage(error)}`);
-    } finally {
-      setIsCreating(false);
-    }
-  }
-
-  return (
-    <>
-      <Card className="mb-8 gap-0 py-0">
-        <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-primary text-base font-semibold text-primary-foreground" aria-hidden="true">
-              {initials(companyName)}
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">Signed in as</p>
-              <h2 className="truncate text-lg font-semibold text-navy-dark">{companyName}</h2>
-            </div>
-            <Badge variant="secondary" className="hidden sm:inline-flex">{accountLabel[accountType]} Account</Badge>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm">
-              <Link to={dashboardPath[accountType]}>
-                <LayoutDashboardIcon aria-hidden="true" />
-                Dashboard
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" type="button" onClick={() => setIsTourRequested(true)}>
-              <CompassIcon aria-hidden="true" />
-              Take the tour
-            </Button>
-            {hasOtherAccount ? (
-              <Button asChild variant="outline" size="sm">
-                <Link to={dashboardPath[otherType]}>
-                  <ArrowLeftRightIcon aria-hidden="true" />
-                  Switch to {accountLabel[otherType]}
-                </Link>
-              </Button>
-            ) : (
-              <Button variant="outline" size="sm" type="button" disabled={isCreating} onClick={() => void createOtherAccount()}>
-                <PlusIcon aria-hidden="true" />
-                {isCreating ? 'Please wait…' : `Create ${accountLabel[otherType]} Account`}
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              type="button"
-              onClick={async () => {
-                await signOut();
-                void navigate('/login');
-              }}
-            >
-              <LogOutIcon aria-hidden="true" />
-              Logout
-            </Button>
-          </div>
-        </div>
-      </Card>
-      {problem && <Notice tone="error">{problem}</Notice>}
-      {isTourOpen && (
+      {isTourOpen && accountType && (
         <Suspense fallback={null}>
           <Tour
             accountType={accountType}
@@ -397,7 +408,16 @@ function ProfileHeader({ accountType }: { accountType: AccountType }) {
           />
         </Suspense>
       )}
-    </>
+    </div>
+  );
+}
+
+/** Layout for pages anyone can see (some need a sign-in), with the frame for whoever is looking. */
+export function PublicLayout() {
+  return (
+    <SiteFrame>
+      <Outlet />
+    </SiteFrame>
   );
 }
 
@@ -417,13 +437,9 @@ function RequireAccount({ accountType, children }: { accountType: AccountType; c
   }
   const profile = accountType === 'business' ? businessProfile : supplierProfile;
   if (!profile) {
-    const otherType: AccountType = accountType === 'business' ? 'supplier' : 'business';
-    const hasOther = otherType === 'business' ? businessProfile !== null : supplierProfile !== null;
     return (
       <Notice>
-        This login does not have a {accountLabel[accountType]} account yet.{' '}
-        {hasOther && <Link to={dashboardPath[otherType]}>Go to your {accountLabel[otherType]} dashboard</Link>}
-        {hasOther && ' to create one from there.'}
+        This login does not have a {accountLabel[accountType].toLowerCase()} account yet. Add one from the menu under your name, top right.
       </Notice>
     );
   }
@@ -432,16 +448,9 @@ function RequireAccount({ accountType, children }: { accountType: AccountType; c
 
 /** Layout for business or supplier pages: requires a signed-in account of that type. */
 export function AccountLayout({ accountType }: { accountType: AccountType }) {
-  const badge = (
-    <Badge variant="secondary" className="h-8 px-3 text-sm">
-      <Building2Icon aria-hidden="true" />
-      {accountLabel[accountType]}
-    </Badge>
-  );
   return (
-    <SiteFrame links={accountType === 'business' ? businessLinks : supplierLinks} brandAside={badge}>
+    <SiteFrame pageAccountType={accountType}>
       <RequireAccount accountType={accountType}>
-        <ProfileHeader accountType={accountType} />
         <Outlet />
       </RequireAccount>
     </SiteFrame>

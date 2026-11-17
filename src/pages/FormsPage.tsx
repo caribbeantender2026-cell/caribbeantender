@@ -4,10 +4,13 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { FileTextIcon } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../auth/AccountContext.tsx';
 import { FormFields, PdfButton, useFormDefinition } from '../components/FormFields.tsx';
 import { ErrorNotice, Loading, Notice } from '../components/Notices.tsx';
+import { PageHeader } from '../components/PageHeader.tsx';
+import { Button } from '../components/ui/button.tsx';
 import type { Json } from '../lib/database.types.ts';
 import { formProblems, type FormData } from '../lib/forms.ts';
 import { errorMessage, supabase } from '../lib/supabase.ts';
@@ -46,37 +49,63 @@ export function FormsPage() {
 
   return (
     <>
-      <h2>Forms</h2>
-      <div className="card">
-        {formsQuery.isPending && <Loading />}
-        {formsQuery.isError && <ErrorNotice error={formsQuery.error} />}
-        {problem && <Notice tone="error">{problem}</Notice>}
-        <ul className="links">
-          {(formsQuery.data ?? []).map((form) => (
-            <li key={form.key}>
-              <strong>{form.title}</strong> <span className="small">{audienceLabels[form.audience]}{form.is_draft ? ' · draft, to be replaced by the client\'s form' : ''}</span>
-              <div className="actions">
-                <Link className="btn" to={`/forms/${form.key}`}>Fill in online</Link>
-                {form.download_path && (
-                  <button type="button" className="btn btn-outline" onClick={() => void downloadPrintable(form.download_path ?? '')}>Download to print</button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <h3>My saved forms</h3>
-      <div className="card">
-        {savedQuery.data?.length === 0 && <p className="small">None yet.</p>}
-        <ul className="links">
-          {(savedQuery.data ?? []).map((saved) => (
-            <li key={saved.id}>
-              <Link to={`/forms/${saved.form_key}?submission=${saved.id}`}>{formsQuery.data?.find((form) => form.key === saved.form_key)?.title ?? saved.form_key}</Link>{' '}
-              <span className="small">saved {formatJamaicaDateTime(saved.updated_at)}{saved.attached_to_type ? ` · attached to a ${saved.attached_to_type}` : ''}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <PageHeader
+        title="Forms"
+        description="The standard forms for tenders and bids. Fill one in here and save it, or download it to print. Forms for a tender or a bid are also filled in from that tender or bid."
+      />
+      {formsQuery.isPending && <Loading />}
+      {formsQuery.isError && <ErrorNotice error={formsQuery.error} />}
+      {problem && <Notice tone="error">{problem}</Notice>}
+      {(Object.keys(audienceLabels) as (keyof typeof audienceLabels)[]).map((audience) => {
+        const forms = (formsQuery.data ?? []).filter((form) => form.audience === audience);
+        if (forms.length === 0) return null;
+        return (
+          <section key={audience} className="mb-10">
+            <h3 className="mb-3 text-sm font-semibold text-navy-dark">{audienceLabels[audience]}</h3>
+            <ul className="grid gap-3 md:grid-cols-2">
+              {forms.map((form) => (
+                <li key={form.key} className="flex flex-col gap-5 rounded-xl bg-card p-5 shadow-surface">
+                  <div className="flex items-start gap-3">
+                    <FileTextIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <div>
+                      <p className="font-medium text-ink">{form.title}</p>
+                      {form.is_draft && <p className="mt-0.5 text-xs text-muted-foreground">Draft, to be replaced by the client's form</p>}
+                    </div>
+                  </div>
+                  <div className="mt-auto flex flex-wrap gap-2">
+                    <Button asChild size="sm">
+                      <Link to={`/forms/${form.key}`}>Fill in online</Link>
+                    </Button>
+                    {form.download_path && (
+                      <Button size="sm" variant="outline" type="button" onClick={() => void downloadPrintable(form.download_path ?? '')}>
+                        Download to print
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+      <section>
+        <h3 className="mb-3 text-sm font-semibold text-navy-dark">My saved forms</h3>
+        <div className="rounded-xl bg-card shadow-surface">
+          {savedQuery.data?.length === 0 && <p className="p-5 text-sm text-muted-foreground">None yet. Forms you save appear here, so you can finish or reuse them.</p>}
+          <ul className="divide-y">
+            {(savedQuery.data ?? []).map((saved) => (
+              <li key={saved.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 py-3">
+                <Link to={`/forms/${saved.form_key}?submission=${saved.id}`} className="font-medium text-navy-dark">
+                  {formsQuery.data?.find((form) => form.key === saved.form_key)?.title ?? saved.form_key}
+                </Link>
+                <span className="text-sm text-muted-foreground">
+                  Saved {formatJamaicaDateTime(saved.updated_at)}{saved.attached_to_type ? `, attached to a ${saved.attached_to_type}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
     </>
   );
 }
@@ -146,7 +175,11 @@ export function FormFillPage() {
 
   return (
     <>
-      <h2>{definition.title}</h2>
+      <PageHeader
+        title={definition.title}
+        description={tenderId ? 'Fill in the requirements for your draft tender, then save to attach it.' : 'Fill it in and save it to come back later, or download it as a PDF.'}
+        back={tenderId ? { to: `/business/tenders/${tenderId}/edit`, label: 'Back to your draft' } : { to: '/forms', label: 'All forms' }}
+      />
       {tenderId && <Notice>This becomes the requirements form of your draft tender. It is locked once the tender is published.</Notice>}
       {isLocked && <Notice>This form is attached to a submitted bid and can't be changed.</Notice>}
       <div className="card form">

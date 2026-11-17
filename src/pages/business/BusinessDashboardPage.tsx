@@ -5,6 +5,7 @@ import { PlusIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { ErrorNotice, Loading } from '../../components/Notices.tsx';
+import { PageHeader } from '../../components/PageHeader.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent } from '../../components/ui/card.tsx';
 import { Label, NativeSelect } from '../../components/ui/fields.tsx';
@@ -37,19 +38,23 @@ export function BusinessDashboardPage() {
 
   return (
     <>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-navy-dark sm:text-3xl">My tenders</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Every tender you have posted, newest first.</p>
-        </div>
-        <Button asChild variant="gold">
-          <Link to="/business/tenders/new">
-            <PlusIcon aria-hidden="true" />
-            Post a tender
-          </Link>
-        </Button>
-      </div>
-      {tendersQuery.data && (
+      <PageHeader
+        title="My tenders"
+        description="Every tender you have posted, newest first. Open one to publish it, see its bids after closing, or award it."
+      />
+      {tendersQuery.data && tenders.length === 0 && (
+        <Card className="items-center gap-3 px-6 py-14 text-center">
+          <p className="font-serif text-2xl text-ink">You haven't posted a tender yet</p>
+          <p className="max-w-md text-sm text-muted-foreground">Describe what you need, choose a closing date, and attach your documents. Suppliers in that category get an email.</p>
+          <Button asChild variant="gold" className="mt-2">
+            <Link to="/business/tenders/new">
+              <PlusIcon aria-hidden="true" />
+              Post your first tender
+            </Link>
+          </Button>
+        </Card>
+      )}
+      {tendersQuery.data && tenders.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           {summaryPhases.map((phase) => (
             <Card key={phase} className="gap-1 py-5">
@@ -61,6 +66,9 @@ export function BusinessDashboardPage() {
           ))}
         </div>
       )}
+      {tendersQuery.isPending && <Loading />}
+      {tendersQuery.isError && <ErrorNotice error={tendersQuery.error} />}
+      {tenders.length > 0 && (
       <Card className="gap-0 overflow-hidden py-0">
         <div className="flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="font-semibold text-navy-dark">Tenders</h3>
@@ -76,8 +84,6 @@ export function BusinessDashboardPage() {
             </div>
           </div>
         </div>
-        {tendersQuery.isPending && <div className="px-4"><Loading /></div>}
-        {tendersQuery.isError && <div className="px-4"><ErrorNotice error={tendersQuery.error} /></div>}
         {tendersQuery.data && (
           <Table>
             <TableHeader className="bg-muted/60">
@@ -108,6 +114,7 @@ export function BusinessDashboardPage() {
           </Table>
         )}
       </Card>
+      )}
     </>
   );
 }

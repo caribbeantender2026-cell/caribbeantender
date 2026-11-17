@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { CategoryOptions } from '../../components/CategoryOptions.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
+import { PageHeader } from '../../components/PageHeader.tsx';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, checkDocument, tenderDocumentPath } from '../../lib/documents.ts';
 import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
@@ -198,7 +199,15 @@ export function TenderFormPage() {
 
   return (
     <>
-      <h2>{isNew ? 'Post a tender' : 'Edit draft'}</h2>
+      <PageHeader
+        title={isNew ? 'Post a tender' : 'Edit draft'}
+        description={
+          isNew
+            ? 'First describe what you need and when bids close. Next you add the requirements form and any documents, then publish it. Nothing is public until you publish.'
+            : 'Your draft is only visible to you. Change the details, add the requirements form and documents below, then publish it from the tender page.'
+        }
+        back={isNew ? { to: '/business', label: 'My tenders' } : { to: `/business/tenders/${tenderId}`, label: 'Back to the tender' }}
+      />
       <div className="card form">
         <form onSubmit={form.handleSubmit(save)} noValidate>
           <label htmlFor="tenderTitle">Title</label>

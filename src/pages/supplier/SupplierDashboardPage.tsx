@@ -10,6 +10,7 @@ import { DocumentList } from '../../components/DocumentList.tsx';
 import { AttachedForm } from '../../components/FormFields.tsx';
 import type { FormData } from '../../lib/forms.ts';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
+import { PageHeader } from '../../components/PageHeader.tsx';
 import type { Enums } from '../../lib/database.types.ts';
 import { formatAmount, useOwnSubscription } from '../../lib/queries.ts';
 import { bidStatusLabels, subscriptionPrices, supplierHasAccess } from '../../lib/rules.ts';
@@ -54,19 +55,19 @@ export function SupplierDashboardPage() {
 
   return (
     <>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-navy-dark sm:text-3xl">My bids</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Every bid you have submitted, with its receipt.</p>
-        </div>
-        <div className="grid w-full gap-2 sm:w-56">
-          <Label htmlFor="bidStatusFilter">Status</Label>
-          <NativeSelect id="bidStatusFilter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'bid_status'> | '')}>
-            <option value="">All</option>
-            {Object.entries(bidStatusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
-          </NativeSelect>
-        </div>
-      </div>
+      <PageHeader
+        title="My bids"
+        description="Every bid you have submitted, with its receipt and its result. To bid on something new, find it in Open tenders."
+        actions={
+          <div className="grid w-full gap-2 sm:w-56">
+            <Label htmlFor="bidStatusFilter">Status</Label>
+            <NativeSelect id="bidStatusFilter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'bid_status'> | '')}>
+              <option value="">All</option>
+              {Object.entries(bidStatusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
+            </NativeSelect>
+          </div>
+        }
+      />
       {subscriptionQuery.isSuccess &&
         (supplierHasAccess(subscription) ? (
           subscription?.status === 'trial' && subscription.trial_ends_at && (
@@ -79,9 +80,10 @@ export function SupplierDashboardPage() {
       {bidsQuery.isError && <ErrorNotice error={bidsQuery.error} />}
       {bidsQuery.data && shown.length === 0 && (
         <Card className="items-center py-14 text-center">
-          <p className="text-sm text-muted-foreground">No bids{statusFilter ? ' with this status' : ' yet'}.</p>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/tenders">Browse open tenders</Link>
+          <p className="font-serif text-2xl text-ink">{statusFilter ? 'No bids with this status' : "You haven't bid on a tender yet"}</p>
+          {!statusFilter && <p className="max-w-md text-sm text-muted-foreground">Find a tender in your category, open it, and press Submit a bid. Your receipt shows up here.</p>}
+          <Button asChild variant="gold" className="mt-2">
+            <Link to="/tenders">Find a tender to bid on</Link>
           </Button>
         </Card>
       )}
