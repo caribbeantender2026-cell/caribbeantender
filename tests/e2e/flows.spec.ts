@@ -107,6 +107,7 @@ test('A business posts a tender with the requirements form filled in online and 
 
   await page.goto(`/business/tenders/${tenderId}`);
   await page.getByRole('button', { name: 'Publish' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByText('Open', { exact: true })).toBeVisible();
   // Opening bids early must fail: nothing about the bids shows before the closing time.
   await expect(page.getByText('Bids are sealed until the closing time')).toBeVisible();
@@ -173,8 +174,8 @@ test('A supplier bids with the proposal form filled in online and gets the recei
   await page.getByLabel('Reference name, row 1').fill('rls-test reference');
   await page.getByLabel('Telephone, row 1').fill('876-555-0102');
   await page.getByLabel(/^I\/We certify that the information in this bid/).check();
-  page.once('dialog', (dialog) => void dialog.accept());
   await page.getByRole('button', { name: 'Submit sealed bid' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Submit my bid' }).click();
   await expect(page.getByText('Bid received')).toBeVisible();
 });
 
@@ -192,8 +193,8 @@ test('The tender closes by itself; a late bid is refused; the business opens the
     await expect(page.getByText('Closed', { exact: true })).toBeVisible({ timeout: 2000 });
   }).toPass({ timeout: closeJobGraceMilliseconds, intervals: [5000] });
   await expect(page.getByText('e2e-supplier Company')).toBeVisible();
-  page.once('dialog', (dialog) => void dialog.accept());
   await page.getByRole('button', { name: 'Award to this bid' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Award the tender' }).click();
   await expect(page.getByText('Awarded', { exact: true }).first()).toBeVisible();
 });
 

@@ -8,6 +8,7 @@ import { useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { FormFields, useFormDefinition } from '../../components/FormFields.tsx';
+import { useConfirmation } from '../../components/ConfirmDialog.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
 import { BidReceipt } from '../../components/TenderView.tsx';
@@ -53,6 +54,7 @@ export function SubmitBidPage() {
   const [supportingFiles, setSupportingFiles] = useState<File[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmation, askToConfirm] = useConfirmation();
 
   if (tenderQuery.isPending || subscriptionQuery.isPending || existingBidQuery.isPending) return <Loading />;
   for (const query of [tenderQuery, subscriptionQuery, existingBidQuery]) {
@@ -102,7 +104,14 @@ export function SubmitBidPage() {
       const problems = formProblems(proposalSchema ?? { fields: [] }, proposalData, true);
       if (!proposalSchema || problems.length > 0) return setProblem(problems.join(' ') || 'The proposal form is not available.');
     }
-    if (!window.confirm(`Submit a bid of ${formatAmount(amount)}? Bids can't be changed after submission.`)) return;
+    const { isConfirmed } = await askToConfirm({
+      title: `Submit a bid of ${formatAmount(amount)}?`,
+      message: "Your bid stays sealed until the closing time, and it can't be changed after you submit it.",
+      confirmLabel: 'Submit my bid',
+      cancelLabel: 'Not yet',
+      tone: 'go-ahead',
+    });
+    if (!isConfirmed) return;
     setIsSubmitting(true);
     try {
       let proposalFormId: string | undefined;
@@ -153,6 +162,7 @@ export function SubmitBidPage() {
   return (
     <>
       {header}
+      {confirmation}
       <div className="card form">
         <form
           onSubmit={(event) => {

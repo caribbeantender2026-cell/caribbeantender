@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DocumentList, type RecordedDocument } from '../../components/DocumentList.tsx';
 import { AttachedForm } from '../../components/FormFields.tsx';
 import type { FormData } from '../../lib/forms.ts';
+import { useConfirmation } from '../../components/ConfirmDialog.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
 import { formatAmount } from '../../lib/queries.ts';
@@ -35,6 +36,7 @@ type BidDocument = { document_id: string; file_name: string; size_bytes: number;
 /** Every bid with its supplier's name, readable from the closing time; the first read is logged as "bids opened". */
 function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: boolean; onChanged: () => Promise<void> }) {
   const [problem, setProblem] = useState<string | null>(null);
+  const [confirmation, askToConfirm] = useConfirmation();
   const bidsQuery = useQuery({
     queryKey: ['tender-bids', tenderId],
     queryFn: async () => {
@@ -46,7 +48,13 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
 
   async function award(bidId: string, supplierName: string) {
     setProblem(null);
-    if (!window.confirm(`Award this tender to ${supplierName}? Every other bid becomes unsuccessful. This can't be undone.`)) return;
+    const { isConfirmed } = await askToConfirm({
+      title: `Award this tender to ${supplierName}?`,
+      message: "Every other bid becomes unsuccessful. This can't be undone.",
+      confirmLabel: 'Award the tender',
+      tone: 'go-ahead',
+    });
+    if (!isConfirmed) return;
     const { error } = await supabase.rpc('award_tender', { tender_id: tenderId, bid_id: bidId });
     if (error) return setProblem(errorMessage(error));
     await onChanged();
@@ -57,6 +65,7 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
   if (bidsQuery.isError) return <ErrorNotice error={bidsQuery.error} />;
   return (
     <>
+      {confirmation}
       {bidsQuery.data.length === 0 && <p>No bids were submitted.</p>}
       {bidsQuery.data.map((bid) => (
         <div className="card" key={bid.bid_id}>
@@ -92,6 +101,7 @@ export function TenderManagePage() {
   const [problem, setProblem] = useState<string | null>(null);
   const [newClosesAt, setNewClosesAt] = useState('');
   const [reason, setReason] = useState('');
+  const [confirmation, askToConfirm] = useConfirmation();
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ['tender', tenderId] });
@@ -107,7 +117,14 @@ export function TenderManagePage() {
   }
 
   async function deleteDraft() {
-    if (!window.confirm('Delete this draft and its uploaded files? This cannot be undone.')) return;
+    const { isConfirmed } = await askToConfirm({
+      title: 'Delete this draft?',
+      message: "Its uploaded files are deleted too. This can't be undone.",
+      confirmLabel: 'Delete draft',
+      cancelLabel: 'Keep it',
+      tone: 'danger',
+    });
+    if (!isConfirmed) return;
     setProblem(null);
     try {
       const files = await listDraftFiles(tenderId);
@@ -143,6 +160,7 @@ export function TenderManagePage() {
   return (
     <>
       <PageHeader title={tender.title} description={phaseGuidance[phase]} back={{ to: '/business', label: 'My tenders' }} />
+      {confirmation}
       <div className="card">
         <p>
           <span className={`badge ${tenderPhaseDisplay[phase].badgeStyle}`}>{tenderPhaseDisplay[phase].label}</span>{' '}
@@ -176,7 +194,20 @@ export function TenderManagePage() {
         {phase === 'draft' && (
           <div className="actions">
             <Link className="btn" to={`/business/tenders/${tender.id}/edit`}>Edit draft and documents</Link>
-            <button type="button" className="btn gold" onClick={() => void act(() => supabase.rpc('publish_tender', { tender_id: tender.id }))}>
+            <button
+              type="button"
+              className="btn gold"
+              onClick={async () => {
+                const { isConfirmed } = await askToConfirm({
+                  title: 'Publish this tender?',
+                  message: 'Suppliers can see it and bid, and those in its category get an email. After publishing you can only extend the closing time or cancel it.',
+                  confirmLabel: 'Publish',
+                  cancelLabel: 'Not yet',
+                  tone: 'go-ahead',
+                });
+                if (isConfirmed) void act(() => supabase.rpc('publish_tender', { tender_id: tender.id }));
+              }}
+            >
               Publish
             </button>
             <button type="button" className="btn btn-outline" onClick={() => void deleteDraft()}>Delete draft</button>
@@ -206,10 +237,16 @@ export function TenderManagePage() {
         {(phase === 'accepting-bids' || phase === 'awaiting-opening' || phase === 'opened') && (
           <form
             className="form"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
-              if (!window.confirm('Cancel this tender? Suppliers can no longer bid, and this cannot be undone.')) return;
-              void act(() => supabase.rpc('cancel_tender', { tender_id: tender.id, reason: reason.trim() }));
+              const { isConfirmed } = await askToConfirm({
+                title: 'Cancel this tender?',
+                message: "Suppliers can no longer bid, and they see your reason. This can't be undone.",
+                confirmLabel: 'Cancel tender',
+                cancelLabel: 'Keep it open',
+                tone: 'danger',
+              });
+              if (isConfirmed) void act(() => supabase.rpc('cancel_tender', { tender_id: tender.id, reason: reason.trim() }));
             }}
           >
             <label htmlFor="cancelReason">Reason for cancelling (shown to suppliers)</label>

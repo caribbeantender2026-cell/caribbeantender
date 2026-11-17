@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from '../../auth/AccountContext.tsx';
+import { useConfirmation } from '../../components/ConfirmDialog.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
 import type { Enums } from '../../lib/database.types.ts';
@@ -94,9 +95,16 @@ function Users() {
     },
   });
 
+  const [confirmation, askToConfirm] = useConfirmation();
+
   async function setActive(userId: string, isActive: boolean, name: string) {
     setProblem(null);
-    if (!window.confirm(`${isActive ? 'Reactivate' : 'Deactivate'} ${name}?`)) return;
+    const { isConfirmed } = await askToConfirm(
+      isActive
+        ? { title: `Reactivate ${name}?`, message: 'They can post, bid and upload again.', confirmLabel: 'Reactivate', tone: 'go-ahead' }
+        : { title: `Deactivate ${name}?`, message: "They won't be able to sign in, post, bid or upload until you reactivate them.", confirmLabel: 'Deactivate', tone: 'danger' },
+    );
+    if (!isConfirmed) return;
     // The Edge Function records the change as this admin, then bans or unbans the account in Auth.
     const { error } = await supabase.functions.invoke('set-user-active', { body: { user_id: userId, is_active: isActive } });
     if (error) {
@@ -108,6 +116,7 @@ function Users() {
 
   return (
     <div className="card">
+      {confirmation}
       <h3>Users</h3>
       <label htmlFor="userSearch">Search by name, email or company</label>
       <input id="userSearch" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -147,6 +156,7 @@ function Tenders() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<Enums<'tender_status'> | ''>('');
   const [problem, setProblem] = useState<string | null>(null);
+  const [confirmation, askToConfirm] = useConfirmation();
   const tendersQuery = useQuery({
     queryKey: ['admin-tenders', statusFilter],
     queryFn: async () => {
@@ -162,8 +172,15 @@ function Tenders() {
 
   async function cancel(tenderId: string, title: string) {
     setProblem(null);
-    const reason = window.prompt(`Why is "${title}" being cancelled? The reason is shown to suppliers.`)?.trim();
-    if (!reason) return;
+    const { isConfirmed, reason } = await askToConfirm({
+      title: `Cancel "${title}"?`,
+      message: "Suppliers can no longer bid. This can't be undone.",
+      reasonLabel: 'Reason (shown to suppliers)',
+      confirmLabel: 'Cancel tender',
+      cancelLabel: 'Keep it',
+      tone: 'danger',
+    });
+    if (!isConfirmed) return;
     const { error } = await supabase.rpc('admin_cancel_tender', { tender_id: tenderId, reason });
     if (error) return setProblem(errorMessage(error));
     await queryClient.invalidateQueries({ queryKey: ['admin-tenders'] });
@@ -171,6 +188,7 @@ function Tenders() {
 
   return (
     <div className="card">
+      {confirmation}
       <h3>Tenders</h3>
       <label htmlFor="adminTenderStatus">Status</label>
       <select id="adminTenderStatus" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Enums<'tender_status'> | '')}>
