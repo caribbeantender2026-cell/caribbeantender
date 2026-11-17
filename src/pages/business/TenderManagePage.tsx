@@ -6,13 +6,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AccountPicture } from '../../components/AccountPicture.tsx';
 import { DocumentList, type RecordedDocument } from '../../components/DocumentList.tsx';
 import { AttachedForm } from '../../components/FormFields.tsx';
 import type { FormData } from '../../lib/forms.ts';
 import { useConfirmation } from '../../components/ConfirmDialog.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
-import { formatAmount } from '../../lib/queries.ts';
+import { formatAmount, useCompanies } from '../../lib/queries.ts';
 import { tenderPhase, tenderPhaseDisplay, type TenderPhase } from '../../lib/rules.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime, jamaicaLocalToUtc, utcToJamaicaLocal } from '../../lib/time.ts';
@@ -45,6 +46,7 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
       return data;
     },
   });
+  const suppliersQuery = useCompanies((bidsQuery.data ?? []).map((bid) => bid.supplier_id), 'supplier');
 
   async function award(bidId: string, supplierName: string) {
     setProblem(null);
@@ -69,7 +71,10 @@ function Bids({ tenderId, canAward, onChanged }: { tenderId: string; canAward: b
       {bidsQuery.data.length === 0 && <p>No bids were submitted.</p>}
       {bidsQuery.data.map((bid) => (
         <div className="card" key={bid.bid_id}>
-          <h4>{bid.supplier_company_name || 'Supplier'}</h4>
+          <div className="flex items-center gap-2.5">
+            <AccountPicture picturePath={suppliersQuery.data?.get(bid.supplier_id)?.picturePath} />
+            <h4>{bid.supplier_company_name || 'Supplier'}</h4>
+          </div>
           <p>
             <strong>{formatAmount(bid.amount, bid.currency)}</strong> · submitted {formatJamaicaDateTime(bid.submitted_at, { withSeconds: true })} ·{' '}
             <span className={`badge ${bid.status}`}>{bid.status.replace('_', ' ')}</span>

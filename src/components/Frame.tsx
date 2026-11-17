@@ -5,13 +5,14 @@
  */
 import { lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
-import { ArrowLeftRightIcon, Building2Icon, ChevronDownIcon, CompassIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PlusIcon, UserRoundIcon, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRightIcon, Building2Icon, ChevronDownIcon, CompassIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PlusIcon, type LucideIcon } from 'lucide-react';
 import { createAccount, useAccount, type AccountType } from '../auth/AccountContext.tsx';
 import { classNames } from '../lib/classNames.ts';
 import { configurationProblem, errorMessage, supportEmail } from '../lib/supabase.ts';
 import logoFullLight from '../assets/brand/logo-full-light.webp';
 import logoMarkLight from '../assets/brand/logo-mark-light.webp';
 import logoMark from '../assets/brand/logo-mark.webp';
+import { AccountPicture } from './AccountPicture.tsx';
 import { Loading, Notice } from './Notices.tsx';
 
 // Loaded only when the tour opens, so it adds nothing to every other page.
@@ -184,9 +185,7 @@ function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountT
           isOverPhoto ? 'border-white/25 bg-white/10 text-white backdrop-blur-md hover:bg-white/15' : 'border-ink/35 bg-white/40 text-ink hover:bg-white/70',
         )}
       >
-        <span className={classNames('grid size-8 place-items-center rounded-[10px]', isOverPhoto ? 'bg-white text-ink' : 'bg-ink text-white')} aria-hidden="true">
-          <UserRoundIcon className="size-[18px]" />
-        </span>
+        <AccountPicture picturePath={profile?.picture_path} className={isOverPhoto ? 'bg-white text-ink' : undefined} />
         <span className="hidden max-w-44 truncate lg:block">{companyName}</span>
         <ChevronDownIcon className="hidden size-4 md:block" aria-hidden="true" />
         <MenuIcon className="size-4 md:hidden" aria-hidden="true" />
@@ -200,9 +199,7 @@ function AccountMenu({ accountType, links, isOverPhoto, onTakeTour }: { accountT
       >
         <div className="grid gap-0.5">
           <div className="flex items-center gap-3 px-3 py-2.5">
-            <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-ink text-white" aria-hidden="true">
-              <UserRoundIcon className="size-5" />
-            </span>
+            <AccountPicture picturePath={profile?.picture_path} className="size-9" />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{companyName}</span>
               <span className="block text-xs text-ink/60">{accountType ? `${accountLabel[accountType]} account` : session?.user.email}</span>

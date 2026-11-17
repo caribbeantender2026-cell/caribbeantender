@@ -46,6 +46,7 @@ Businesses post tenders. Suppliers send sealed bids that nobody can open before 
 ### Across the platform
 
 - One sign-in for both account types, with a switch in the account menu.
+- An optional picture for each account, shown next to its company name on tenders and bids.
 - Ready-made forms (registrations, requirements, proposals) that save as drafts and download as PDFs.
 - An admin area behind two-factor sign-in, for deactivating accounts and cancelling tenders.
 - Tender documents are shared through download links that expire after 60 seconds.

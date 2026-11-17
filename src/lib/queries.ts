@@ -1,5 +1,6 @@
 /** Data reads and small helpers that several pages share. */
 import { useQuery } from '@tanstack/react-query';
+import type { AccountType } from '../auth/AccountContext.tsx';
 import { supabase } from './supabase.ts';
 
 /** Rows per page on the tender list (PRD P1-04: paginated). */
@@ -42,23 +43,26 @@ export function useOpenTenders(categoryId: number | null, page: number) {
   });
 }
 
-/** Company names by user id. Every signed-in user may read every company name (OPEN_QUESTIONS.md, item 18). */
-export function useCompanyNames(userIds: string[]) {
+/** A company as other people see it: its name and picture. */
+export type PublicCompany = { companyName: string | null; picturePath: string | null };
+
+/**
+ * Companies by user id, for one account type: tenders show the business account, bids the supplier
+ * account, even for a person who has both. Every signed-in user may read these (OPEN_QUESTIONS.md, item 18).
+ */
+export function useCompanies(userIds: string[], accountType: AccountType) {
   const uniqueIds = [...new Set(userIds)].sort();
   return useQuery({
-    queryKey: ['company-names', uniqueIds],
+    queryKey: ['companies', accountType, uniqueIds],
     enabled: uniqueIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase.from('company_names').select('user_id, account_type, company_name').in('user_id', uniqueIds);
+      const { data, error } = await supabase
+        .from('company_names')
+        .select('user_id, company_name, picture_path')
+        .eq('account_type', accountType)
+        .in('user_id', uniqueIds);
       if (error) throw error;
-      // A person can have both account types; the business name is the one shown on tenders.
-      const names = new Map<string, string>();
-      for (const row of data) {
-        if (row.company_name && (row.account_type === 'business' || !names.has(row.user_id))) {
-          names.set(row.user_id, row.company_name);
-        }
-      }
-      return names;
+      return new Map(data.map((row): [string, PublicCompany] => [row.user_id, { companyName: row.company_name, picturePath: row.picture_path }]));
     },
   });
 }

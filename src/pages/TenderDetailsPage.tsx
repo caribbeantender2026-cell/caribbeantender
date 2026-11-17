@@ -8,7 +8,7 @@ import type { FormData } from '../lib/forms.ts';
 import { ErrorNotice, Loading, Notice } from '../components/Notices.tsx';
 import { TenderView, useNow } from '../components/TenderView.tsx';
 import { Button } from '../components/ui/button.tsx';
-import { useCategories, useCompanyNames } from '../lib/queries.ts';
+import { useCategories, useCompanies } from '../lib/queries.ts';
 import { tenderPhase } from '../lib/rules.ts';
 import { supabase } from '../lib/supabase.ts';
 
@@ -36,7 +36,7 @@ export function TenderDetailsPage() {
   const now = useNow();
   const tenderQuery = useTender(tenderId);
   const tender = tenderQuery.data?.tender ?? null;
-  const namesQuery = useCompanyNames(tender ? [tender.business_id] : []);
+  const companiesQuery = useCompanies(tender ? [tender.business_id] : [], 'business');
   const categoriesQuery = useCategories();
 
   if (tenderQuery.isPending) return <Loading />;
@@ -56,7 +56,8 @@ export function TenderDetailsPage() {
       <TenderView
         tender={tender}
         now={now}
-        businessName={namesQuery.data?.get(tender.business_id) ?? 'Business'}
+        businessName={companiesQuery.data?.get(tender.business_id)?.companyName ?? 'Business'}
+        businessPicturePath={companiesQuery.data?.get(tender.business_id)?.picturePath}
         categoryName={categoryName}
         documents={tenderQuery.data.documents}
         requirementsForm={

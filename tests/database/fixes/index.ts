@@ -6,6 +6,7 @@ import { clientFormsSuite, formsSuite, tenderLifecycleSuite } from './03-forms-l
 import { bidRulesSuite, sealedBidsSuite } from './04-bids-sealed.ts';
 import { signupSuite, storagePoliciesSuite } from './05-storage-signup.ts';
 import { adminSuite, leastPrivilegeGrantsSuite, notificationsSuite } from './06-notifications-admin-grants.ts';
+import { accountPicturesSuite } from './07-account-pictures.ts';
 
 // Migrations without a suite of their own: 040060 (profile columns, exercised by the deactivation
 // and onboarding cases), 040400 (enum values) and 040410 (document tables, exercised by the bid,
@@ -28,4 +29,5 @@ export const fixSuites: FixSuite[] = [
   leastPrivilegeGrantsSuite,
   clientCategoriesSuite,
   clientFormsSuite,
+  accountPicturesSuite,
 ];

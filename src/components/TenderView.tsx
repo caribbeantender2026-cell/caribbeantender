@@ -6,6 +6,7 @@ import type { Tables } from '../lib/database.types.ts';
 import { formatAmount } from '../lib/queries.ts';
 import { tenderPhase, tenderPhaseDisplay } from '../lib/rules.ts';
 import { formatJamaicaDateTime, formatTimeLeft } from '../lib/time.ts';
+import { AccountPicture } from './AccountPicture.tsx';
 import { DocumentList, type RecordedDocument } from './DocumentList.tsx';
 import { Notice } from './Notices.tsx';
 import { Badge } from './ui/badge.tsx';
@@ -38,6 +39,8 @@ type TenderViewProps = {
   tender: Pick<Tables<'tenders'>, 'title' | 'description' | 'status' | 'closes_at' | 'cancelled_reason'>;
   now: Date;
   businessName: string;
+  /** The business's account picture; without one a person icon shows. */
+  businessPicturePath?: string | null;
   categoryName: string;
   documents: RecordedDocument[];
   /** The requirements form, shown under the documents when the tender has one. */
@@ -49,7 +52,7 @@ type TenderViewProps = {
 };
 
 /** Details and documents in the main card; the closing time, with a countdown while bids are open, in the side card. */
-export function TenderView({ tender, now, businessName, categoryName, documents, requirementsForm, actions, sideCardFirstOnSmallScreens = false }: TenderViewProps) {
+export function TenderView({ tender, now, businessName, businessPicturePath, categoryName, documents, requirementsForm, actions, sideCardFirstOnSmallScreens = false }: TenderViewProps) {
   const phase = tenderPhase(tender, now);
   const timeLeft = formatTimeLeft(tender.closes_at, now);
   const showsCountdown = phase === 'accepting-bids' && timeLeft !== null;
@@ -62,7 +65,10 @@ export function TenderView({ tender, now, businessName, categoryName, documents,
             <Badge variant="outline" className="font-normal">{categoryName}</Badge>
           </div>
           <h2 className="text-2xl leading-tight font-semibold tracking-tight text-navy-dark sm:text-3xl">{tender.title}</h2>
-          <CardDescription>Posted by {businessName}</CardDescription>
+          <div className="flex items-center gap-2">
+            <AccountPicture picturePath={businessPicturePath} className="size-6 rounded-md" />
+            <CardDescription>Posted by {businessName}</CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           {tender.cancelled_reason && (

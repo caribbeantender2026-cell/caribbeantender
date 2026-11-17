@@ -1,6 +1,7 @@
 /** Open tenders for signed-in users: soonest-closing first, filtered by one category, a page at a time (PRD P1-04). */
 import { Link, useSearchParams } from 'react-router';
 import { ChevronLeftIcon, ChevronRightIcon, Clock3Icon, SearchXIcon } from 'lucide-react';
+import { AccountPicture } from '../components/AccountPicture.tsx';
 import { CategoryOptions } from '../components/CategoryOptions.tsx';
 import { ErrorNotice, Loading } from '../components/Notices.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
@@ -9,7 +10,7 @@ import { Button } from '../components/ui/button.tsx';
 import { Card } from '../components/ui/card.tsx';
 import { Label, NativeSelect } from '../components/ui/fields.tsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table.tsx';
-import { tendersPerPage, useCategories, useCompanyNames, useOpenTenders } from '../lib/queries.ts';
+import { tendersPerPage, useCategories, useCompanies, useOpenTenders } from '../lib/queries.ts';
 import { formatJamaicaDateTime, formatTimeLeft } from '../lib/time.ts';
 
 /** Reads a whole number from the address bar, or the fallback for anything else. */
@@ -26,7 +27,7 @@ export function TendersPage() {
   const categoriesQuery = useCategories();
   const tendersQuery = useOpenTenders(categoryId, page);
   const tenders = tendersQuery.data?.tenders ?? [];
-  const namesQuery = useCompanyNames(tenders.map((tender) => tender.business_id));
+  const companiesQuery = useCompanies(tenders.map((tender) => tender.business_id), 'business');
   const categoryNames = new Map((categoriesQuery.data ?? []).map((category) => [category.id, category.name]));
   const pageCount = Math.max(1, Math.ceil((tendersQuery.data?.totalCount ?? 0) / tendersPerPage));
 
@@ -38,7 +39,8 @@ export function TendersPage() {
   }
 
   const now = new Date();
-  const businessName = (businessId: string) => namesQuery.data?.get(businessId) ?? 'Business';
+  const businessName = (businessId: string) => companiesQuery.data?.get(businessId)?.companyName ?? 'Business';
+  const businessPicture = (businessId: string) => <AccountPicture picturePath={companiesQuery.data?.get(businessId)?.picturePath} className="size-6 rounded-md" />;
   const categoryName = (id: number | null) => (id !== null ? (categoryNames.get(id) ?? 'Uncategorised') : 'Uncategorised');
   return (
     <>
@@ -72,7 +74,10 @@ export function TendersPage() {
             {tenders.map((tender) => (
               <li key={tender.id} className="relative p-4">
                 <Link to={`/tenders/${tender.id}`} className="font-medium text-navy-dark after:absolute after:inset-0">{tender.title}</Link>
-                <p className="mt-1 text-sm text-muted-foreground">{businessName(tender.business_id)} · {categoryName(tender.category_id)}</p>
+                <p className="mt-1.5 flex items-center gap-2 text-sm text-muted-foreground">
+                  {businessPicture(tender.business_id)}
+                  <span className="min-w-0">{businessName(tender.business_id)} · {categoryName(tender.category_id)}</span>
+                </p>
                 <p className="mt-2 flex items-center gap-1.5 text-sm tabular-nums">
                   <Clock3Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
                   {formatTimeLeft(tender.closes_at, now) ?? 'Closing'} left
@@ -98,7 +103,12 @@ export function TendersPage() {
                     <TableCell className="max-w-sm pl-5 font-medium">
                       <Link to={`/tenders/${tender.id}`} className="text-navy-dark">{tender.title}</Link>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{businessName(tender.business_id)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <span className="flex items-center gap-2">
+                        {businessPicture(tender.business_id)}
+                        {businessName(tender.business_id)}
+                      </span>
+                    </TableCell>
                     <TableCell><Badge variant="outline" className="font-normal">{categoryName(tender.category_id)}</Badge></TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">
                       {formatJamaicaDateTime(tender.closes_at)}

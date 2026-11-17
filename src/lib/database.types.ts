@@ -147,6 +147,7 @@ export type Database = {
           created_at: string
           description: string | null
           phone: string | null
+          picture_path: string | null
           updated_at: string
           user_id: string
         }
@@ -158,6 +159,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           phone?: string | null
+          picture_path?: string | null
           updated_at?: string
           user_id: string
         }
@@ -169,6 +171,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           phone?: string | null
+          picture_path?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -219,16 +222,19 @@ export type Database = {
         Row: {
           account_type: Database["public"]["Enums"]["account_type"]
           company_name: string | null
+          picture_path: string | null
           user_id: string
         }
         Insert: {
           account_type: Database["public"]["Enums"]["account_type"]
           company_name?: string | null
+          picture_path?: string | null
           user_id: string
         }
         Update: {
           account_type?: Database["public"]["Enums"]["account_type"]
           company_name?: string | null
+          picture_path?: string | null
           user_id?: string
         }
         Relationships: [
@@ -595,6 +601,7 @@ export type Database = {
           description: string | null
           industry_category: string | null
           phone: string | null
+          picture_path: string | null
           updated_at: string
           user_id: string
         }
@@ -608,6 +615,7 @@ export type Database = {
           description?: string | null
           industry_category?: string | null
           phone?: string | null
+          picture_path?: string | null
           updated_at?: string
           user_id: string
         }
@@ -621,6 +629,7 @@ export type Database = {
           description?: string | null
           industry_category?: string | null
           phone?: string | null
+          picture_path?: string | null
           updated_at?: string
           user_id?: string
         }
