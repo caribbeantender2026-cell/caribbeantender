@@ -14,6 +14,7 @@ import { Button } from '../components/ui/button.tsx';
 import { Card, CardContent } from '../components/ui/card.tsx';
 import type { Json } from '../lib/database.types.ts';
 import { formProblems, type FormData } from '../lib/forms.ts';
+import { businessRegistrationFormKey } from '../lib/queries.ts';
 import { errorMessage, supabase } from '../lib/supabase.ts';
 import { formatJamaicaDateTime } from '../lib/time.ts';
 
@@ -122,6 +123,8 @@ export function FormFillPage() {
   const [searchParameters] = useSearchParams();
   const tenderId = searchParameters.get('tender');
   const submissionId = searchParameters.get('submission');
+  // The business pages send an unregistered business here; it must complete the form to go on (Rockell, 22 Nov 2026).
+  const isRequiredRegistration = formKey === businessRegistrationFormKey && searchParameters.has('required');
   const { session } = useAccount();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -131,11 +134,13 @@ export function FormFillPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const existingQuery = useQuery({
-    queryKey: ['form-submission', formKey, tenderId, submissionId],
+    queryKey: ['form-submission', formKey, tenderId, submissionId, isRequiredRegistration],
     queryFn: async () => {
       let request = supabase.from('form_submissions').select('id, form_version, data, attached_to_type, attached_to_id').eq('form_key', formKey).eq('owner_id', session?.user.id ?? '');
       if (submissionId) request = request.eq('id', submissionId);
       else if (tenderId) request = request.eq('attached_to_type', 'tender').eq('attached_to_id', tenderId);
+      // Picks up a registration form saved earlier but not finished, so its answers aren't lost.
+      else if (isRequiredRegistration) request = request.is('attached_to_type', null).order('updated_at', { ascending: false }).limit(1);
       else return null;
       const { data: found, error } = await request.maybeSingle();
       if (error) throw error;
@@ -169,7 +174,7 @@ export function FormFillPage() {
 
   async function save() {
     setOutcome(null);
-    const found = formProblems(definition?.parsedSchema ?? { fields: [] }, current, tenderId !== null);
+    const found = formProblems(definition?.parsedSchema ?? { fields: [] }, current, tenderId !== null || isRequiredRegistration);
     setProblems(found);
     if (found.length > 0) return;
     setIsSaving(true);
@@ -191,9 +196,17 @@ export function FormFillPage() {
       if (!saved.data) return setOutcome({ tone: 'error', text: "The form wasn't saved: it may have been locked or removed. Reload the page and try again." });
       await queryClient.invalidateQueries({ queryKey: ['form-submission'] });
       await queryClient.invalidateQueries({ queryKey: ['own-forms'] });
+      if (formKey === businessRegistrationFormKey) {
+        // 'all': no business page is open to refetch it, and its cached "not registered" would send the business back here.
+        await queryClient.invalidateQueries({ queryKey: ['business-registration'], refetchType: 'all' });
+      }
       if (tenderId) {
         await queryClient.invalidateQueries({ queryKey: ['tender', tenderId] });
         void navigate(`/business/tenders/${tenderId}/edit`);
+        return;
+      }
+      if (isRequiredRegistration) {
+        void navigate('/business');
         return;
       }
       // The address now names the saved form, so the next Save updates it instead of making a copy.
@@ -212,6 +225,7 @@ export function FormFillPage() {
         back={tenderId ? { to: `/business/tenders/${tenderId}/edit`, label: 'Back to your draft' } : { to: '/forms', label: 'All forms' }}
       />
       {tenderId && <Notice>This becomes the requirements form of your draft tender. It is locked once the tender is published.</Notice>}
+      {isRequiredRegistration && <Notice>Complete your Business Registration Form to start posting tenders. You only need to do this once.</Notice>}
       {isLocked && <Notice>This form is attached to {existing?.attached_to_type === 'bid' ? 'a submitted bid' : 'a published tender'} and can't be changed.</Notice>}
       <Card className="max-w-3xl">
         <CardContent>

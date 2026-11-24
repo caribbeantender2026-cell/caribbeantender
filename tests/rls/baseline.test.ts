@@ -50,8 +50,9 @@ async function openApi(): Promise<OpenApiDocument> {
 
 describe('Baseline: every audit item reproduces on the production schema', () => {
   before(async () => {
-    business = await createAccount('baseline-business', 'business');
-    otherBusiness = await createAccount('baseline-business-two', 'business');
+    // The baseline schema predates the client's forms, so there is no registration form to fill in.
+    business = await createAccount('baseline-business', 'business', undefined, { isRegistered: false });
+    otherBusiness = await createAccount('baseline-business-two', 'business', undefined, { isRegistered: false });
     supplier = await createAccount('baseline-supplier', 'supplier');
     expiredSupplier = await createAccount('baseline-supplier-expired', 'supplier');
     const expired = await adminClient

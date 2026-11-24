@@ -195,7 +195,7 @@ The installer uploads and verifies each file before enabling its download. For t
 - **Locked-down browser.** A strict Content Security Policy, HSTS, no framing, and a minimum of TLS 1.2.
 - **No secrets in the repo.** Only public keys are committed. Everything else lives in GitHub, Supabase or Cloudflare secrets.
 
-Found a security problem? Email **support@caribbeantender.com** rather than opening a public issue.
+Found a security problem? Email **info@caribbeantender.com** rather than opening a public issue.
 
 ## Project structure
 

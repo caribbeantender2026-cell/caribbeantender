@@ -8,7 +8,7 @@ const supabaseUrl: string = import.meta.env.VITE_SUPABASE_URL ?? '';
 const publishableKey: string = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
 
 /** Where people get help, for example when a trial has ended (OPEN_QUESTIONS.md, item 12). */
-export const supportEmail: string = import.meta.env.VITE_SUPPORT_EMAIL || 'support@caribbeantender.com';
+export const supportEmail: string = import.meta.env.VITE_SUPPORT_EMAIL || 'info@caribbeantender.com';
 
 /** Shown on every page while the app is not connected; null once it is. */
 export const configurationProblem = publicSettingsProblem(supabaseUrl, publishableKey);

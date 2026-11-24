@@ -263,6 +263,8 @@ export const leastPrivilegeGrantsSuite: FixSuite = {
           'public.admin_list_users',
           'public.admin_set_user_active',
           'public.award_tender',
+          // The app asks whether the signed-in business has completed its registration form (Rockell, 22 Nov 2026).
+          ...(lastMigration >= '20261124000000' ? ['public.business_registration_complete'] : []),
           'public.cancel_tender',
           'public.extend_tender_closing_time',
           'public.publish_tender',

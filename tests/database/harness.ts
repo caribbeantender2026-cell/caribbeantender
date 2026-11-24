@@ -6,6 +6,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { requiredAnswers, type FormField } from '../formAnswers.ts';
 
 const migrationsDirectory = new URL('../../supabase/migrations/', import.meta.url);
 
@@ -200,7 +201,8 @@ export type AccountType = 'business' | 'supplier';
 /** Creates a user the way sign-up does: an auth.users row whose metadata the signup trigger reads. */
 export async function createUser(
   database: PGlite,
-  options: { accountType: AccountType; fullName?: string; companyName?: string },
+  // A business is registered unless isRegistered is false: posting tenders needs it (Rockell, 22 Nov 2026).
+  options: { accountType: AccountType; fullName?: string; companyName?: string; isRegistered?: boolean },
 ): Promise<string> {
   const userId = randomUUID();
   await database.query(`insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`, [
@@ -213,7 +215,30 @@ export async function createUser(
     userId,
     options.companyName ?? `Company ${userId.slice(0, 8)}`,
   ]);
+  if (options.accountType === 'business' && options.isRegistered !== false) {
+    await registerBusiness(database, userId);
+  }
   return userId;
+}
+
+/** Saves a complete Business Registration Form for a business. Schemas from before the client's forms have none to fill. */
+export async function registerBusiness(database: PGlite, businessId: string): Promise<void> {
+  const hasForms = await database.query<{ present: boolean }>(`select to_regclass('public.form_definitions') is not null as present`);
+  if (!hasForms.rows[0]?.present) {
+    return;
+  }
+  const definition = await database.query<{ version: number; schema: { fields: FormField[] } }>(
+    `select version, schema from public.form_definitions where key = 'business-registration' order by version desc limit 1`,
+  );
+  const registrationForm = definition.rows[0];
+  if (!registrationForm) {
+    return;
+  }
+  await writeFixture(
+    database,
+    `insert into public.form_submissions (owner_id, form_key, form_version, data) values ($1, 'business-registration', $2, $3)`,
+    [businessId, registrationForm.version, JSON.stringify(requiredAnswers(registrationForm.schema.fields))],
+  );
 }
 
 /** Gives an existing user a second account type, as the "Create Supplier Account" button does. */

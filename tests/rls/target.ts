@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { requiredAnswers, type FormField } from '../formAnswers.ts';
 
 const productionProjectRef = 'ijlcjthgwppllhlqocep';
 
@@ -52,7 +53,13 @@ export const testPassword = `Rls-${randomUUID()}`;
  * A confirmed user, created through the admin API so the project's "Confirm email" setting can stay
  * as in production. The signup trigger runs exactly as for a real sign-up.
  */
-export async function createAccount(label: string, accountType: 'business' | 'supplier', fullName = `Test ${label}`): Promise<TestAccount> {
+export async function createAccount(
+  label: string,
+  accountType: 'business' | 'supplier',
+  fullName = `Test ${label}`,
+  // A business is registered unless isRegistered is false: posting tenders needs it (Rockell, 22 Nov 2026).
+  options: { isRegistered?: boolean } = {},
+): Promise<TestAccount> {
   const email = `rls-test-${runIdentifier}-${label}@example.com`;
   const created = await adminClient.auth.admin.createUser({
     email,
@@ -71,7 +78,24 @@ export async function createAccount(label: string, accountType: 'business' | 'su
   const profileTable = accountType === 'business' ? 'business_profiles' : 'supplier_profiles';
   const named = await adminClient.from(profileTable).update({ company_name: `${label} Company` }).eq('user_id', signedIn.data.user.id);
   assert.equal(named.error, null, `naming ${label}`);
+  if (accountType === 'business' && options.isRegistered !== false) {
+    await registerBusiness(label, signedIn.data.user.id);
+  }
   return { client, userId: signedIn.data.user.id, email };
+}
+
+/** Saves a complete Business Registration Form for a test business, as setup (the checks never use this client). */
+async function registerBusiness(label: string, businessId: string): Promise<void> {
+  const definition = await adminClient.from('form_definitions').select('version, schema').eq('key', 'business-registration').order('version', { ascending: false }).limit(1).single();
+  assert.equal(definition.error, null, `reading the registration form for ${label}`);
+  const fields = (definition.data?.schema as { fields?: FormField[] } | null)?.fields ?? [];
+  const saved = await adminClient.from('form_submissions').insert({
+    owner_id: businessId,
+    form_key: 'business-registration',
+    form_version: definition.data?.version,
+    data: requiredAnswers(fields),
+  });
+  assert.equal(saved.error, null, `registering ${label}`);
 }
 
 /** Whether a test account can start a new session (a banned account can't). */

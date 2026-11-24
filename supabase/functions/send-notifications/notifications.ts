@@ -43,7 +43,7 @@ function when(details: Record<string, unknown>, key: string): string {
 
 // The client's brand colours (navy #00204F, gold #D99E04), with the site's paper and text greys.
 const brandColours = { navy: '#00204F', gold: '#D99E04', paper: '#F4F6F9', text: '#1F2937', quiet: '#6B7280', rule: '#E5E7EB' };
-const supportAddress = 'support@caribbeantender.com';
+const supportAddress = 'info@caribbeantender.com';
 const bodyFont = 'Arial,Helvetica,sans-serif';
 
 /** One paragraph of an email body, spaced the same in every mail client. */
