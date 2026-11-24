@@ -64,6 +64,28 @@ test('Back, Pause and Next go through the numbered steps at the visitor\'s pace'
   await expect(steps.getByRole('button', { name: 'Play' })).toBeVisible();
 });
 
+test('Pause stops the countdown, and Play carries on from where it stopped', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'For Suppliers' }).click();
+  const listedTimeLeft = demo(page).getByText(/^\d+ minutes? \d+ seconds? left$/);
+  await expect(listedTimeLeft).toBeVisible();
+  const secondsLeft = async () => {
+    const [minutes = 0, seconds = 0] = ((await listedTimeLeft.textContent()) ?? '').match(/\d+/g)?.map(Number) ?? [];
+    return minutes * 60 + seconds;
+  };
+
+  await page.getByRole('group', { name: 'Demo steps' }).getByRole('button', { name: 'Pause' }).click();
+  const pausedReading = await listedTimeLeft.textContent();
+  await page.waitForTimeout(pauseLongerThanOneTickMilliseconds * 2);
+  await expect(listedTimeLeft).toHaveText(pausedReading ?? '');
+
+  const pausedSeconds = await secondsLeft();
+  await page.getByRole('group', { name: 'Demo steps' }).getByRole('button', { name: 'Play' }).click();
+  await expect(listedTimeLeft).not.toHaveText(pausedReading ?? '');
+  // Counting on from the paused reading, not jumping ahead by the time spent paused.
+  expect(await secondsLeft()).toBeGreaterThanOrEqual(pausedSeconds - 2);
+});
+
 test.describe('with reduced motion', () => {
   test.use({ reducedMotion: 'reduce' });
 

@@ -468,7 +468,14 @@ function RequireAccount({ accountType, children }: { accountType: AccountType; c
   // Every business page waits until the Business Registration Form is complete (Rockell, 22 Nov 2026).
   if (accountType === 'business') {
     if (registrationQuery.isPending) return <Loading />;
-    if (registrationQuery.isError) return <ErrorNotice error={registrationQuery.error} />;
+    if (registrationQuery.isError) {
+      return (
+        <>
+          <ErrorNotice error={registrationQuery.error} />
+          <Button type="button" variant="outline" onClick={() => void registrationQuery.refetch()}>Try again</Button>
+        </>
+      );
+    }
     if (!registrationQuery.data) return <Navigate to={businessRegistrationPath} replace />;
   }
   return <>{children}</>;

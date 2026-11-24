@@ -196,13 +196,16 @@ export function FormFillPage() {
       if (!saved.data) return setOutcome({ tone: 'error', text: "The form wasn't saved: it may have been locked or removed. Reload the page and try again." });
       await queryClient.invalidateQueries({ queryKey: ['form-submission'] });
       await queryClient.invalidateQueries({ queryKey: ['own-forms'] });
+      if (formKey === businessRegistrationFormKey) {
+        // 'all': no business page is open to refetch it, and its cached "not registered" would send the business back here.
+        await queryClient.invalidateQueries({ queryKey: ['business-registration'], refetchType: 'all' });
+      }
       if (tenderId) {
         await queryClient.invalidateQueries({ queryKey: ['tender', tenderId] });
         void navigate(`/business/tenders/${tenderId}/edit`);
         return;
       }
       if (isRequiredRegistration) {
-        await queryClient.invalidateQueries({ queryKey: ['business-registration'] });
         void navigate('/business');
         return;
       }

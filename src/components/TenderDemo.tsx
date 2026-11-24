@@ -534,7 +534,10 @@ export function TenderDemo() {
   const [stepIndex, setStepIndex] = useState(() => (prefersReducedMotion ? stillStepIndex('business') : 0));
   const [runStartedAt, setRunStartedAt] = useState(() => Date.now());
   const [typedLengths, setTypedLengths] = useState<Partial<Record<Field, number>>>({});
-  const [isPaused, setIsPaused] = useState(false);
+  // The time the demo's countdown shows while paused; null while it plays.
+  const [pausedAt, setPausedAt] = useState<Date | null>(null);
+  const isPaused = pausedAt !== null;
+  const demoNow = pausedAt ?? now;
   // Starts far off to the right, so the first move is the pointer arriving from outside the window.
   const [pointer, setPointer] = useState({ x: 10_000, y: 300, tiltDegrees: 0 });
   const windowRef = useRef<HTMLDivElement>(null);
@@ -550,6 +553,19 @@ export function TenderDemo() {
     setStepIndex(prefersReducedMotion ? stillStepIndex(nextFlow) : 0);
     setTypedLengths({});
     setRunStartedAt(Date.now());
+    // Started while paused, the new countdown stands still at its full time.
+    if (isPaused) setPausedAt(new Date());
+  }
+
+  /** Pause stops the countdown too; Play moves its start on by the time spent paused, so it carries on where it stopped. */
+  function togglePause() {
+    if (pausedAt === null) {
+      setPausedAt(now);
+      return;
+    }
+    const pausedMilliseconds = now.getTime() - pausedAt.getTime();
+    setRunStartedAt((startedAt) => startedAt + pausedMilliseconds);
+    setPausedAt(null);
   }
 
   /** Back and Next: jumps to a scene of this flow; past the last one, the other flow starts. */
@@ -609,11 +625,11 @@ export function TenderDemo() {
   const screens: Record<Screen, () => ReactNode> = {
     'post-form': () => <PostFormScreen step={step} shownText={shownText} />,
     'business-tender': () => <BusinessTenderScreen step={step} />,
-    'tender-list': () => <TenderListScreen step={step} timeLeft={formatTimeLeft(closesAt, now) ?? 'Closing'} />,
+    'tender-list': () => <TenderListScreen step={step} timeLeft={formatTimeLeft(closesAt, demoNow) ?? 'Closing'} />,
     'tender-page': () => (
       <TenderView
         tender={{ ...demoTender, status: 'open', closes_at: closesAt }}
-        now={now}
+        now={demoNow}
         businessName={demoBusinessName}
         categoryName={demoCategoryName}
         documents={demoDocuments}
@@ -654,7 +670,7 @@ export function TenderDemo() {
             Back
           </button>
           {!prefersReducedMotion && (
-            <button type="button" className={demoControl} onClick={() => setIsPaused(!isPaused)}>
+            <button type="button" className={demoControl} onClick={togglePause}>
               {isPaused ? <PlayIcon className="size-4" aria-hidden="true" /> : <PauseIcon className="size-4" aria-hidden="true" />}
               {isPaused ? 'Play' : 'Pause'}
             </button>

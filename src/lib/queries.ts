@@ -69,7 +69,6 @@ export function useCompanies(userIds: string[], accountType: AccountType) {
   });
 }
 
-/** The signed-in supplier's trial or subscription (only their own row is readable). */
 /** Where a business without a completed registration form is sent: the form, in its must-complete mode. */
 export const businessRegistrationFormKey = 'business-registration';
 export const businessRegistrationPath = `/forms/${businessRegistrationFormKey}?required=1`;
@@ -90,6 +89,7 @@ export function useBusinessRegistration(userId: string, enabled: boolean) {
   });
 }
 
+/** The signed-in supplier's trial or subscription (only their own row is readable). */
 export function useOwnSubscription(supplierId: string) {
   return useQuery({
     queryKey: ['subscription', supplierId],
