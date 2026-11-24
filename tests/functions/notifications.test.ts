@@ -24,7 +24,7 @@ test('Every email carries the brand frame: the logo from the site, a heading, on
     assert.match(email.html, /<img src="https:\/\/caribbeantender.com\/email\/logo.png"/, `${type}: logo`);
     assert.match(email.html, /<h1 /, `${type}: heading`);
     assert.equal(email.html.match(/background:#D99E04;padding:12px 22px;"><a /g)?.length, 1, `${type}: one gold button`);
-    assert.match(email.html, /support@caribbeantender.com/, `${type}: footer`);
+    assert.match(email.html, /info@caribbeantender.com/, `${type}: footer`);
   }
 });
 

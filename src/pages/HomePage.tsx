@@ -18,17 +18,29 @@ import worksPhoto from '../assets/photos/works-site.webp';
 const container = 'mx-auto w-full max-w-[1440px] px-4 sm:px-8';
 const sectionHeading = 'font-serif text-4xl leading-[1.1] font-normal tracking-[-0.01em] text-ink sm:text-5xl';
 
+// Wording from the client's review (Rockell, 22 Nov 2026).
 const audiences = [
   {
     title: 'For Businesses',
-    text: 'Post a tender, collect sealed bids, and award the best one.',
-    points: ['Documents and a requirements form with every tender', 'Your own closing date and time', 'Every bid opened at once after closing'],
+    headline: 'Find the Right Suppliers. Secure the Best Value.',
+    text: 'Connect with qualified suppliers, receive competitive bids, and confidently select the best partner for your business needs.',
+    points: [
+      'Create and publish tenders anytime. Be sure to include clear requirements and supporting documents.',
+      'Review proposals and award contracts to the most suitable suppliers.',
+    ],
+    action: { label: 'Post a Tender', signedInPath: '/business/tenders/new' },
     photo: professionalPhoto,
   },
   {
     title: 'For Suppliers',
-    text: 'Find work in your category and bid before the closing time.',
-    points: ['Open tenders by category', 'Email alerts for new tenders in your category', 'A receipt for every bid you submit'],
+    headline: 'Discover Opportunities. Grow Your Business.',
+    text: 'Access contract opportunities across the Caribbean, connect with potential clients, and compete for projects that match your expertise.',
+    points: [
+      'Explore available tenders across different industries and service categories.',
+      'Receive email alerts for new opportunities matching your business.',
+      'Submit competitive bids and secure available contracts.',
+    ],
+    action: { label: 'Browse Open Tenders', signedInPath: '/tenders' },
     photo: goodsPhoto,
   },
 ];
@@ -58,12 +70,13 @@ export function HomePage() {
     <>
       {/* Clipped sideways only: a vertical clip cut the bottom fade a pixel short of the edge at some zoom levels. */}
       <section className="hills-backdrop fades-to-paper -mt-16 overflow-x-clip text-white sm:-mt-[72px]">
-        <div className={classNames(container, 'pt-28 sm:pt-[136px]')}>
-          <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
-            <h2 className="font-serif text-[52px] leading-[1.05] font-normal tracking-[-0.0125em] text-white sm:text-6xl lg:text-[72px]">eTendering System</h2>
-            <div className="lg:pt-4">
+        {/* The longer heading gets the wider column and a smaller size, so heading, demo steps and controls fit one screen. */}
+        <div className={classNames(container, 'pt-24 sm:pt-[112px]')}>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-12">
+            <h2 className="font-serif text-[40px] leading-[1.05] font-normal tracking-[-0.0125em] text-white sm:text-5xl lg:text-[58px]">Connecting Businesses to Opportunities</h2>
+            <div className="lg:pt-2">
               <p className="max-w-[36rem] text-lg leading-[1.35] text-white/85 sm:text-xl">
-                CaribbeanTender is a procurement platform where businesses publish tenders and suppliers submit sealed bids electronically.
+                Caribbean Tender is an online procurement marketplace connecting businesses with qualified suppliers and enabling suppliers to compete for contract opportunities across the Caribbean.
               </p>
             </div>
           </div>
@@ -73,16 +86,19 @@ export function HomePage() {
 
       <section className={classNames(container, 'pt-24 sm:pt-32')}>
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className={sectionHeading}>One Platform for Buyers and Suppliers</h2>
-          <p className="mt-4 text-lg leading-[1.4] text-ink/75">Businesses post tenders and award the best bid. Suppliers find work in their category and bid.</p>
+          <h2 className={sectionHeading}>One Platform. Endless Opportunities</h2>
+          <p className="mt-4 text-lg leading-[1.4] text-ink/75">
+            Businesses connect with qualified suppliers through competitive tendering, while suppliers discover new contract opportunities and compete for projects across the Caribbean.
+          </p>
         </div>
         <div className="mt-12 grid gap-4 md:grid-cols-2">
-          {audiences.map(({ title, text, points, photo }) => (
+          {audiences.map(({ title, headline, text, points, action, photo }) => (
             <article key={title} className="overflow-hidden rounded-lg bg-midnight text-white">
               <img src={photo} alt="" width={1000} height={700} loading="lazy" className="aspect-[16/9] h-auto w-full object-cover" />
               <div className="p-8 sm:p-10">
                 <h3 className="font-serif text-[32px] leading-[1.1] font-normal">{title}</h3>
-                <p className="mt-3 text-white/75">{text}</p>
+                <p className="mt-3 text-lg font-medium text-white">{headline}</p>
+                <p className="mt-2 text-white/75">{text}</p>
                 <ul className="mt-6 space-y-2.5 text-sm text-white/85">
                   {points.map((point) => (
                     <li key={point} className="flex items-start gap-2.5">
@@ -91,8 +107,9 @@ export function HomePage() {
                     </li>
                   ))}
                 </ul>
-                <Link to={signUpPath} className="mt-8 inline-flex rounded-button border border-white px-4 py-2.5 text-sm font-medium text-white no-underline transition-colors duration-150 hover:bg-white/10 hover:no-underline">
-                  {signUpLabel}
+                {/* Visitors sign up first; a signed-in person goes straight there (each page checks the account type). */}
+                <Link to={session ? action.signedInPath : '/register'} className="mt-8 inline-flex rounded-button border border-white px-4 py-2.5 text-sm font-medium text-white no-underline transition-colors duration-150 hover:bg-white/10 hover:no-underline">
+                  {action.label}
                 </Link>
               </div>
             </article>
@@ -124,9 +141,9 @@ export function HomePage() {
         <div className={classNames(container, 'grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-8')}>
           <img src={signingPhoto} alt="A supplier signing a proposal." width={1600} height={1200} loading="lazy" className="aspect-square h-auto w-full rounded-lg object-cover" />
           <div className="lg:pl-8">
-            <p className="font-serif text-3xl leading-[1.2] text-ink sm:text-[40px]">Nobody sees a bid before the closing time. Not even the business.</p>
+            <p className="font-serif text-3xl leading-[1.2] text-ink sm:text-[40px]">Secure and Confidential Bidding</p>
             <p className="mt-6 max-w-lg text-lg leading-[1.45] text-ink/75">
-              Every bid stays locked until the tender closes. Then the business sees all the bids at once and awards one.
+              All bid submissions are confidential and shared exclusively with the business (buyer). Bids remain securely sealed until the submission deadline, ensuring a fair and competitive procurement process.
             </p>
             <Link to="/about" className="group mt-8 inline-flex items-center gap-1.5 text-lg font-medium text-ink no-underline hover:no-underline">
               About CaribbeanTender

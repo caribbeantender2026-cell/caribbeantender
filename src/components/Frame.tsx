@@ -8,6 +8,7 @@ import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { ArrowLeftRightIcon, Building2Icon, ChevronDownIcon, CompassIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, PlusIcon, type LucideIcon } from 'lucide-react';
 import { createAccount, useAccount, type AccountType } from '../auth/AccountContext.tsx';
 import { classNames } from '../lib/classNames.ts';
+import { businessRegistrationPath, useBusinessRegistration } from '../lib/queries.ts';
 import { configurationProblem, errorMessage, supportEmail } from '../lib/supabase.ts';
 import logoFullLight from '../assets/brand/logo-full-light.webp';
 import logoMarkLight from '../assets/brand/logo-mark-light.webp';
@@ -373,9 +374,10 @@ function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountTyp
         {children}
       </main>
       <footer className="bg-midnight text-white">
-        <div className={classNames(container, 'grid gap-10 pt-16 pb-12 md:grid-cols-[1fr_auto_auto_auto] md:gap-24')}>
+        {/* Logo and three link columns only (Rockell, 22 Nov 2026): kept compact. */}
+        <div className={classNames(container, 'grid gap-8 pt-10 pb-8 md:grid-cols-[1fr_auto_auto_auto] md:gap-16')}>
           <Link to="/" className="self-start" aria-label="Caribbean Tender home">
-            <img src={logoFullLight} alt="Caribbean Tender, Private Procurement Platform" width={720} height={421} className="h-auto w-56" />
+            <img src={logoFullLight} alt="Caribbean Tender, Private Procurement Platform" width={720} height={421} className="h-auto w-40" />
           </Link>
           <nav aria-label="Platform" className="grid content-start gap-3 text-sm font-medium">
             <p className="font-normal text-white/50">Platform</p>
@@ -402,8 +404,8 @@ function SiteFrame({ pageAccountType, children }: { pageAccountType?: AccountTyp
             <span>{supportEmail}</span>
           </div>
         </div>
-        <p className={classNames(container, 'border-t border-white/15 py-6 text-sm text-white/50')}>
-          Copyright © {new Date().getFullYear()} CaribbeanTender. Every deadline is in Jamaica time.
+        <p className={classNames(container, 'border-t border-white/15 py-4 text-sm text-white/50')}>
+          © {new Date().getFullYear()} Caribbean Tender
         </p>
       </footer>
       {isTourOpen && accountType && (
@@ -439,6 +441,7 @@ export function PublicLayout() {
 function RequireAccount({ accountType, children }: { accountType: AccountType; children: ReactNode }) {
   const { session, isLoading, businessProfile, supplierProfile, accountsError, refreshAccounts } = useAccount();
   const location = useLocation();
+  const registrationQuery = useBusinessRegistration(session?.user.id ?? '', accountType === 'business' && businessProfile !== null);
   if (isLoading) {
     return <Loading />;
   }
@@ -461,6 +464,12 @@ function RequireAccount({ accountType, children }: { accountType: AccountType; c
         This login does not have a {accountLabel[accountType].toLowerCase()} account yet. Add one from the menu under your name, top right.
       </Notice>
     );
+  }
+  // Every business page waits until the Business Registration Form is complete (Rockell, 22 Nov 2026).
+  if (accountType === 'business') {
+    if (registrationQuery.isPending) return <Loading />;
+    if (registrationQuery.isError) return <ErrorNotice error={registrationQuery.error} />;
+    if (!registrationQuery.data) return <Navigate to={businessRegistrationPath} replace />;
   }
   return <>{children}</>;
 }

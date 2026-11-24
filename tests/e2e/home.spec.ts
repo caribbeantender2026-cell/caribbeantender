@@ -3,7 +3,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const pauseLongerThanOneTickMilliseconds = 2000;
-const oneWholeScenarioMilliseconds = 30_000;
+// The business scenario runs about 33 seconds since it was slowed down (Rockell, 22 Nov 2026).
+const oneWholeScenarioMilliseconds = 45_000;
 
 function demo(page: Page) {
   return page.locator('[inert]');
@@ -38,8 +39,46 @@ test('The supplier tab plays the supplier scenario, with a live countdown and a 
   await expect(demo(page).getByText('Awarded')).toBeVisible({ timeout: oneWholeScenarioMilliseconds });
 });
 
+test('Back, Pause and Next go through the numbered steps at the visitor\'s pace', async ({ page }) => {
+  await page.goto('/');
+  const steps = page.getByRole('group', { name: 'Demo steps' });
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+  await expect(page.getByText('A business posts a tender', { exact: true })).toBeVisible();
+  await expect(steps.getByRole('button', { name: 'Back' })).toBeDisabled();
+
+  await steps.getByRole('button', { name: 'Pause' }).click();
+  await steps.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText('Step 2 of 5')).toBeVisible();
+  await expect(page.getByText('The business publishes it', { exact: true })).toBeVisible();
+  await expect(page.getByText(/then select Publish/)).toBeVisible();
+  // Paused, the step stays put.
+  await page.waitForTimeout(pauseLongerThanOneTickMilliseconds * 2);
+  await expect(page.getByText('Step 2 of 5')).toBeVisible();
+
+  await steps.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+  // Next after the last step moves on to the supplier's scenario, still paused.
+  for (let scene = 1; scene <= 5; scene += 1) await steps.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByRole('button', { name: 'For Suppliers' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('Step 1 of 5')).toBeVisible();
+  await expect(steps.getByRole('button', { name: 'Play' })).toBeVisible();
+});
+
 test.describe('with reduced motion', () => {
   test.use({ reducedMotion: 'reduce' });
+
+  test('Next shows each step finished, with no Pause button since nothing moves', async ({ page }) => {
+    await page.goto('/');
+    const steps = page.getByRole('group', { name: 'Demo steps' });
+    await expect(steps.getByRole('button', { name: 'Pause' })).toHaveCount(0);
+    // Without motion the supplier tab opens on its still screen, step 2.
+    await page.getByRole('button', { name: 'For Suppliers' }).click();
+    await expect(page.getByText('Step 2 of 5')).toBeVisible();
+    await steps.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByText('The supplier enters a sealed bid', { exact: true })).toBeVisible();
+    // The amount the supplier types is already in the field.
+    await expect(demo(page).getByText('980000', { exact: true })).toBeVisible();
+  });
 
   test('Each tab shows one still screen', async ({ page }) => {
     await page.goto('/');

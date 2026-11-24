@@ -44,7 +44,7 @@ const templates = [
     heading: 'Confirm your new email',
     bodyHtml: paragraph('You asked to change your CaribbeanTender email from {{ .Email }} to {{ .NewEmail }}. Confirm the change with the button below.'),
     button: { label: 'Confirm the change', url: confirmationLink },
-    footnoteHtml: "If you didn't ask for this, email support@caribbeantender.com straight away.",
+    footnoteHtml: "If you didn't ask for this, email info@caribbeantender.com straight away.",
   },
   {
     file: 'invite.html',

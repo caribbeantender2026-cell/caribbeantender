@@ -1,12 +1,14 @@
 /**
  * The home page hero's demo: the real pages with sample data, played as two scenarios with a pointer
  * clicking through them. A business posts and publishes a tender, then opens the bids and awards one; a
- * supplier finds that tender, bids and gets a sealed receipt, then sees the award. The demo itself is
- * inert (nothing in it can be clicked or focused, and screen readers get one label); only the two tabs
- * above it are real buttons. For people who turn animation off, each tab shows one still screen.
+ * supplier finds that tender, bids and gets a sealed receipt, then sees the award. Each scene is a numbered
+ * step with a plain instruction, and Back, Pause and Next let people go at their own pace (Rockell's
+ * review, 22 Nov 2026). The demo window itself is inert (nothing in it can be clicked or focused, and screen
+ * readers get one label); only the tabs and step controls are real buttons. For people who turn animation
+ * off, nothing moves: each step shows its finished screen.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { CalendarIcon, ChevronDownIcon, FileTextIcon, LockIcon, MousePointer2Icon, type LucideIcon } from 'lucide-react';
+import { CalendarIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, FileTextIcon, LockIcon, MousePointer2Icon, PauseIcon, PlayIcon, type LucideIcon } from 'lucide-react';
 import { classNames } from '../lib/classNames.ts';
 import type { Enums } from '../lib/database.types.ts';
 import { formatAmount } from '../lib/queries.ts';
@@ -22,6 +24,13 @@ import { Label } from './ui/fields.tsx';
 
 const millisecondsPerSecond = 1000;
 const typingMillisecondsPerCharacter = 55;
+// The first cut played too fast to follow (Rockell, 22 Nov 2026): every step and every typed letter
+// takes this many times longer than the scripted timings below.
+const playbackSlowdown = 1.7;
+// The tabs and the step controls share one glass pill style, side by side above the demo.
+const demoControlGroup = 'flex w-fit gap-1 rounded-button border border-white/25 bg-white/10 p-1 backdrop-blur-md';
+const demoControl =
+  'inline-flex cursor-pointer items-center gap-1.5 rounded-button px-3 py-2 text-sm font-medium text-white/85 transition-colors duration-150 hover:bg-white/10 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent';
 // In the supplier's scenario the tender closes this long after the run starts, so its countdown ticks in seconds.
 const demoClosesAfterSeconds = 47 * 60 + 30;
 const demoBidSubmittedAfterSeconds = 9;
@@ -71,9 +80,9 @@ type Target = Field | 'save-draft' | 'publish' | 'award' | 'tender-link' | 'subm
 type BusinessTenderPhase = 'draft' | 'published' | 'closed' | 'awarded';
 /** One pointer move: where it goes, whether it clicks, and whether a field fills in (typed, or picked at once). */
 type Move = { milliseconds: number; pointerAt?: Target | 'outside'; isClick?: boolean; fills?: 'typing' | 'at-once'; isStill?: boolean };
-/** One screen of a scenario, with its caption and the pointer's moves while it shows. */
-type Scene = { screen: Screen; caption: string; businessPhase?: BusinessTenderPhase; showsReceipt?: boolean; moves: Move[] };
-type Step = Omit<Scene, 'moves'> & Move;
+/** One screen of a scenario: its caption, what to do on the real site, and the pointer's moves while it shows. */
+type Scene = { screen: Screen; caption: string; instruction: string; businessPhase?: BusinessTenderPhase; showsReceipt?: boolean; moves: Move[] };
+type Step = Omit<Scene, 'moves'> & Move & { sceneIndex: number };
 
 const fieldValues: Record<Field, string> = {
   title: demoTender.title,
@@ -88,6 +97,7 @@ const businessScenes: Scene[] = [
   {
     screen: 'post-form',
     caption: 'A business posts a tender',
+    instruction: 'Select Post a tender, fill in the title, category, description and closing time, then select Save draft and add documents.',
     moves: [
       { milliseconds: 1200, pointerAt: 'outside' },
       { milliseconds: 900, pointerAt: 'title' },
@@ -107,27 +117,42 @@ const businessScenes: Scene[] = [
     screen: 'business-tender',
     businessPhase: 'draft',
     caption: 'The business publishes it',
+    instruction: 'Attach the requirements form and any documents, then select Publish. Suppliers in that category get an email.',
     moves: [
       { milliseconds: 1000, pointerAt: 'publish' },
       { milliseconds: 400, pointerAt: 'publish', isClick: true },
     ],
   },
-  { screen: 'business-tender', businessPhase: 'published', caption: 'Bids stay sealed until closing', moves: [{ milliseconds: 2600, pointerAt: 'outside' }] },
+  {
+    screen: 'business-tender',
+    businessPhase: 'published',
+    caption: 'Bids stay sealed until closing',
+    instruction: 'Suppliers submit bids until the closing time. Every bid stays sealed until then.',
+    moves: [{ milliseconds: 2600, pointerAt: 'outside' }],
+  },
   {
     screen: 'business-tender',
     businessPhase: 'closed',
     caption: 'At closing, every bid opens at once',
+    instruction: 'At the closing time all the bids open together. Review each one, then select Award to this bid.',
     moves: [
       { milliseconds: 1500, pointerAt: 'award' },
       { milliseconds: 400, pointerAt: 'award', isClick: true },
     ],
   },
-  { screen: 'business-tender', businessPhase: 'awarded', caption: 'The business awards the tender', moves: [{ milliseconds: 3000, isStill: true }] },
+  {
+    screen: 'business-tender',
+    businessPhase: 'awarded',
+    caption: 'The business awards the tender',
+    instruction: 'The tender is awarded, and each supplier who bid sees the result under My bids.',
+    moves: [{ milliseconds: 3000, isStill: true }],
+  },
 ];
 const supplierScenes: Scene[] = [
   {
     screen: 'tender-list',
     caption: 'A supplier finds a tender',
+    instruction: 'Go to Open tenders and select a tender that fits your business.',
     moves: [
       { milliseconds: 1200, pointerAt: 'outside' },
       { milliseconds: 1000, pointerAt: 'tender-link' },
@@ -137,6 +162,7 @@ const supplierScenes: Scene[] = [
   {
     screen: 'tender-page',
     caption: 'The supplier reads it and bids',
+    instruction: 'Read the details and download the documents, then select Submit a bid.',
     moves: [
       { milliseconds: 1100, pointerAt: 'submit-bid', isStill: true },
       { milliseconds: 400, pointerAt: 'submit-bid', isClick: true },
@@ -145,6 +171,7 @@ const supplierScenes: Scene[] = [
   {
     screen: 'bid-page',
     caption: 'The supplier enters a sealed bid',
+    instruction: 'Enter your bid amount, fill in the proposal form or upload your own, then select Submit sealed bid before the closing time.',
     moves: [
       { milliseconds: 900, pointerAt: 'amount' },
       { milliseconds: 300, pointerAt: 'amount', isClick: true },
@@ -153,21 +180,32 @@ const supplierScenes: Scene[] = [
       { milliseconds: 400, pointerAt: 'submit-sealed-bid', isClick: true },
     ],
   },
-  { screen: 'bid-page', showsReceipt: true, caption: 'A receipt, timed to the second', moves: [{ milliseconds: 2600 }] },
-  { screen: 'my-bids', caption: 'Later, the supplier sees the award', moves: [{ milliseconds: 3000, pointerAt: 'outside' }] },
+  {
+    screen: 'bid-page',
+    showsReceipt: true,
+    caption: 'A receipt, timed to the second',
+    instruction: 'A receipt shows the exact second your sealed bid was received, and a copy arrives by email.',
+    moves: [{ milliseconds: 2600 }],
+  },
+  {
+    screen: 'my-bids',
+    caption: 'Later, the supplier sees the award',
+    instruction: 'Once the business awards the tender, My bids shows whether you won.',
+    moves: [{ milliseconds: 3000, pointerAt: 'outside' }],
+  },
 ];
 
-/** A scenario's scenes as one list of steps, each carrying its scene's screen and caption. */
+/** A scenario's scenes as one list of steps, each carrying its scene's screen, caption and number. */
 function stepsOf(scenes: Scene[]): Step[] {
-  return scenes.flatMap(({ moves, ...scene }) => moves.map((move) => ({ ...scene, ...move })));
+  return scenes.flatMap(({ moves, ...scene }, sceneIndex) => moves.map((move) => ({ ...scene, ...move, sceneIndex })));
 }
 
-const flows: Record<Flow, { label: string; steps: Step[]; next: Flow }> = {
-  business: { label: 'For Businesses', steps: stepsOf(businessScenes), next: 'supplier' },
-  supplier: { label: 'For Suppliers', steps: stepsOf(supplierScenes), next: 'business' },
+const flows: Record<Flow, { label: string; steps: Step[]; sceneCount: number; next: Flow }> = {
+  business: { label: 'For Businesses', steps: stepsOf(businessScenes), sceneCount: businessScenes.length, next: 'supplier' },
+  supplier: { label: 'For Suppliers', steps: stepsOf(supplierScenes), sceneCount: supplierScenes.length, next: 'business' },
 };
 // Never shown: a flow's step index always points into its steps. It only satisfies the type checker.
-const fallbackStep: Step = { screen: 'tender-page', caption: '', milliseconds: millisecondsPerSecond };
+const fallbackStep: Step = { screen: 'tender-page', caption: '', instruction: '', sceneIndex: 0, milliseconds: millisecondsPerSecond };
 
 const screenPaths: Record<Screen, string> = {
   'post-form': 'business/tenders/new',
@@ -212,6 +250,25 @@ function isField(target: Target | 'outside' | undefined): target is Field {
 /** The step a flow shows when motion is off. */
 function stillStepIndex(flow: Flow): number {
   return Math.max(0, flows[flow].steps.findIndex((step) => step.isStill));
+}
+
+/**
+ * Where Back and Next land in a scene: its first step when the demo plays, so the scene runs from its
+ * start; its last step when motion is off, so the still screen shows the scene finished.
+ */
+function landingStepIndex(flow: Flow, sceneIndex: number, isMotionOff: boolean): number {
+  const steps = flows[flow].steps;
+  const isInScene = (step: Step) => step.sceneIndex === sceneIndex;
+  return Math.max(0, isMotionOff ? steps.findLastIndex(isInScene) : steps.findIndex(isInScene));
+}
+
+/** What each field shows once the steps before this one have run, so a jump lands on a consistent screen. */
+function filledBefore(flow: Flow, stepIndex: number): Partial<Record<Field, number>> {
+  const lengths: Partial<Record<Field, number>> = {};
+  for (const step of flows[flow].steps.slice(0, stepIndex)) {
+    if (step.fills !== undefined && isField(step.pointerAt)) lengths[step.pointerAt] = fieldValues[step.pointerAt].length;
+  }
+  return lengths;
 }
 
 /** A bid's status in the demo: every bid waits until the award, then one wins. */
@@ -477,6 +534,7 @@ export function TenderDemo() {
   const [stepIndex, setStepIndex] = useState(() => (prefersReducedMotion ? stillStepIndex('business') : 0));
   const [runStartedAt, setRunStartedAt] = useState(() => Date.now());
   const [typedLengths, setTypedLengths] = useState<Partial<Record<Field, number>>>({});
+  const [isPaused, setIsPaused] = useState(false);
   // Starts far off to the right, so the first move is the pointer arriving from outside the window.
   const [pointer, setPointer] = useState({ x: 10_000, y: 300, tiltDegrees: 0 });
   const windowRef = useRef<HTMLDivElement>(null);
@@ -494,16 +552,29 @@ export function TenderDemo() {
     setRunStartedAt(Date.now());
   }
 
+  /** Back and Next: jumps to a scene of this flow; past the last one, the other flow starts. */
+  function goToScene(sceneIndex: number) {
+    if (sceneIndex >= flows[flow].sceneCount) {
+      startFlow(flows[flow].next);
+      return;
+    }
+    const landing = landingStepIndex(flow, Math.max(0, sceneIndex), prefersReducedMotion);
+    setStepIndex(landing);
+    // Without motion the landing step is shown finished, its own fields included.
+    setTypedLengths(filledBefore(flow, prefersReducedMotion ? landing + 1 : landing));
+  }
+
   // Moves to the next step when this one's time is up; after a flow's last step, the other flow starts.
+  // ponytail: resuming after Pause replays the current step's full time, not what was left of it.
   useEffect(() => {
-    if (prefersReducedMotion) return;
+    if (prefersReducedMotion || isPaused) return;
     const timer = window.setTimeout(() => {
       if (stepIndex + 1 < flows[flow].steps.length) setStepIndex(stepIndex + 1);
       else startFlow(flows[flow].next);
-    }, step.milliseconds);
+    }, step.milliseconds * playbackSlowdown);
     return () => window.clearTimeout(timer);
     // startFlow only calls state setters, so it needn't restart the timer.
-  }, [prefersReducedMotion, flow, stepIndex, step.milliseconds]);
+  }, [prefersReducedMotion, isPaused, flow, stepIndex, step.milliseconds]);
 
   // Fills in the field under the pointer: typed one character at a time, or picked all at once.
   useEffect(() => {
@@ -514,12 +585,13 @@ export function TenderDemo() {
       setTypedLengths((lengths) => ({ ...lengths, [field]: fullLength }));
       return;
     }
+    if (isPaused) return;
     const timer = window.setInterval(
       () => setTypedLengths((lengths) => ({ ...lengths, [field]: Math.min((lengths[field] ?? 0) + 1, fullLength) })),
-      typingMillisecondsPerCharacter,
+      typingMillisecondsPerCharacter * playbackSlowdown,
     );
     return () => window.clearInterval(timer);
-  }, [step]);
+  }, [step, isPaused]);
 
   // Sends the pointer to this step's target, measured once the step's screen is on the page.
   // ponytail: measured once per step; resizing the window mid-step leaves the pointer off target until the next step.
@@ -558,22 +630,47 @@ export function TenderDemo() {
   };
 
   return (
-    <div className="mx-auto mt-14 w-full max-w-[1144px] lg:mt-[72px] lg:w-[88%]">
-      <div role="group" aria-label="Demo scenario" className="mx-auto mb-4 flex w-fit gap-1 rounded-button border border-white/25 bg-white/10 p-1 backdrop-blur-md">
-        {(Object.keys(flows) as Flow[]).map((flowName) => (
-          <button
-            key={flowName}
-            type="button"
-            aria-pressed={flow === flowName}
-            onClick={() => startFlow(flowName)}
-            className={classNames(
-              'cursor-pointer rounded-button px-4 py-2 text-sm font-medium transition-colors duration-150',
-              flow === flowName ? 'bg-white text-ink' : 'text-white/85 hover:bg-white/10 hover:text-white',
-            )}
-          >
-            {flows[flowName].label}
+    <div className="mx-auto mt-10 w-full max-w-[1144px] lg:mt-12 lg:w-[88%]">
+      <div className="mb-3 flex flex-wrap items-center justify-center gap-3">
+        <div role="group" aria-label="Demo scenario" className={demoControlGroup}>
+          {(Object.keys(flows) as Flow[]).map((flowName) => (
+            <button
+              key={flowName}
+              type="button"
+              aria-pressed={flow === flowName}
+              onClick={() => startFlow(flowName)}
+              className={classNames(
+                'cursor-pointer rounded-button px-4 py-2 text-sm font-medium transition-colors duration-150',
+                flow === flowName ? 'bg-white text-ink' : 'text-white/85 hover:bg-white/10 hover:text-white',
+              )}
+            >
+              {flows[flowName].label}
+            </button>
+          ))}
+        </div>
+        <div role="group" aria-label="Demo steps" className={demoControlGroup}>
+          <button type="button" className={demoControl} disabled={step.sceneIndex === 0} onClick={() => goToScene(step.sceneIndex - 1)}>
+            <ChevronLeftIcon className="size-4" aria-hidden="true" />
+            Back
           </button>
-        ))}
+          {!prefersReducedMotion && (
+            <button type="button" className={demoControl} onClick={() => setIsPaused(!isPaused)}>
+              {isPaused ? <PlayIcon className="size-4" aria-hidden="true" /> : <PauseIcon className="size-4" aria-hidden="true" />}
+              {isPaused ? 'Play' : 'Pause'}
+            </button>
+          )}
+          <button type="button" className={demoControl} onClick={() => goToScene(step.sceneIndex + 1)}>
+            Next
+            <ChevronRightIcon className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <div key={`${flow}-${step.sceneIndex}`} className="mx-auto mb-4 max-w-3xl text-center text-white motion-safe:animate-fade-in">
+        <p className="text-base font-medium sm:text-lg">
+          <span className="text-white/70">Step {step.sceneIndex + 1} of {flows[flow].sceneCount} · </span>
+          <span>{step.caption}</span>
+        </p>
+        <p className="mt-0.5 text-sm leading-[1.45] text-white/85">{step.instruction}</p>
       </div>
       <div
         role="img"
@@ -591,8 +688,8 @@ export function TenderDemo() {
               <LockIcon className="size-3 shrink-0" aria-hidden="true" />
               <span className="truncate">caribbeantender.com/{screenPaths[step.screen]}</span>
             </span>
-            <span key={step.caption} className="truncate text-xs text-muted-foreground motion-safe:animate-fade-in">
-              <span className="font-medium text-navy-dark">Example:</span> {step.caption}
+            <span className="truncate text-xs text-muted-foreground">
+              <span className="font-medium text-navy-dark">Example</span> with sample data
             </span>
           </div>
           <div key={`${flow}-${step.screen}`} inert className="px-4 pt-5 motion-safe:animate-fade-in sm:px-8 sm:pt-7">

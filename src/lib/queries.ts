@@ -70,6 +70,26 @@ export function useCompanies(userIds: string[], accountType: AccountType) {
 }
 
 /** The signed-in supplier's trial or subscription (only their own row is readable). */
+/** Where a business without a completed registration form is sent: the form, in its must-complete mode. */
+export const businessRegistrationFormKey = 'business-registration';
+export const businessRegistrationPath = `/forms/${businessRegistrationFormKey}?required=1`;
+
+/**
+ * Whether the signed-in business has completed its Business Registration Form, which it must before
+ * posting tenders (Rockell, 22 Nov 2026). The database decides, with the same rule it enforces.
+ */
+export function useBusinessRegistration(userId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['business-registration', userId],
+    enabled: enabled && userId !== '',
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('business_registration_complete');
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 export function useOwnSubscription(supplierId: string) {
   return useQuery({
     queryKey: ['subscription', supplierId],

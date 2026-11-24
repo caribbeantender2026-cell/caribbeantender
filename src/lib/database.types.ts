@@ -924,6 +924,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      business_registration_complete: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
       submit_bid: {
         Args: {
           amount: number

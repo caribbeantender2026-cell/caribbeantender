@@ -41,7 +41,7 @@ export function BusinessDashboardPage() {
     <>
       <PageHeader
         title="My tenders"
-        description="Every tender you have posted, newest first. Open one to publish it, see its bids after closing, or award it."
+        description="View and manage all your tenders in one place, from the most recent to the oldest. Publish tenders, review submitted bids after the closing deadline, evaluate proposals, and award contracts to your preferred supplier."
       />
       {tendersQuery.data && tenders.length === 0 && (
         <Card className="items-center gap-3 px-6 py-14 text-center">
