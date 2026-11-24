@@ -1,7 +1,7 @@
 // The forms engine's rules mirror private.form_data_problems, so the screen refuses what the database would.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { displayValue, formProblems, grandTotal, lineTotal, numberFieldText, readNumber, readSchema, showsLineTotal, type FormSchema } from '../../src/lib/forms.ts';
+import { displayValue, formProblems, grandTotal, isShown, lineTotal, numberFieldText, readNumber, readSchema, showsLineTotal, type FormSchema } from '../../src/lib/forms.ts';
 
 const proposal: FormSchema = {
   fields: [
@@ -146,4 +146,40 @@ test('One complete reference and a manually discounted proposal total are valid'
   const answers = { bid_references: [{ name: 'Purchasing manager' }], pricing_schedule: [{ unit_price: 1000 }], total_bid_value: 700 };
   assert.deepEqual(formProblems(schema, answers, true), []);
   assert.match(formProblems(schema, { ...answers, bid_references: [] }, true).join(' '), /References is required/);
+});
+
+// Rockell, 24 Nov 2026: budget amounts appear and become required only for the budget type that uses them.
+const budget: FormSchema = { fields: [
+  { name: 'budget_type', label: 'Budget type', type: 'choice', required: true, options: ['Fixed Budget', 'Budget Range', 'Open Competitive Bidding'] },
+  { name: 'fixed_budget', label: 'Fixed budget', type: 'number', required: true, minimum: 0, showWhen: { field: 'budget_type', equals: 'Fixed Budget' } },
+  { name: 'budget_minimum', label: 'Minimum', type: 'number', required: true, minimum: 0, showWhen: { field: 'budget_type', equals: 'Budget Range' } },
+  { name: 'budget_maximum', label: 'Maximum', type: 'number', required: true, minimum: 0, showWhen: { field: 'budget_type', equals: 'Budget Range' } },
+] };
+
+test('A field shown for one answer is required only while that answer is picked', () => {
+  assert.deepEqual(formProblems(budget, { budget_type: 'Open Competitive Bidding' }, true), []);
+  assert.deepEqual(formProblems(budget, { budget_type: 'Fixed Budget' }, true), ['Fixed budget is required.']);
+  assert.deepEqual(formProblems(budget, { budget_type: 'Budget Range', budget_minimum: 100 }, true), ['Maximum is required.']);
+  // Nothing picked yet: the amounts don't apply, so only the choice itself is missing.
+  assert.deepEqual(formProblems(budget, {}, true), ['Budget type is required.']);
+});
+
+test('An answer left in a field that no longer applies is neither checked nor shown', () => {
+  const switched = { budget_type: 'Budget Range', budget_minimum: 100, budget_maximum: 200, fixed_budget: -5 };
+  assert.deepEqual(formProblems(budget, switched, true), []);
+  assert.deepEqual(budget.fields.filter((field) => isShown(field, switched)).map((field) => field.name), ['budget_type', 'budget_minimum', 'budget_maximum']);
+});
+
+test('A date column takes only real calendar dates', () => {
+  const milestones: FormSchema = { fields: [
+    { name: 'milestones', label: 'Key milestones', type: 'table', required: true, columns: [
+      { name: 'milestone', label: 'Milestone', type: 'text', required: true },
+      { name: 'target_date', label: 'Target date', type: 'date', required: true },
+    ] },
+  ] };
+  assert.deepEqual(formProblems(milestones, { milestones: [{ milestone: 'Delivery', target_date: '2026-12-15' }] }, true), []);
+  assert.deepEqual(formProblems(milestones, { milestones: [{ milestone: 'Delivery', target_date: 'mid-December' }] }, true), [
+    'Row 1 of Key milestones: Target date must be a date like 2026-11-30.',
+  ]);
+  assert.deepEqual(formProblems(milestones, { milestones: [{ milestone: 'Delivery' }] }, true), ['Row 1 of Key milestones: Target date is required.']);
 });

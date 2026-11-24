@@ -5,12 +5,12 @@
  */
 
 /** A column of a table field. */
-export type FormColumn = { name: string; label: string; type: 'text' | 'number'; required?: boolean; maxLength?: number; minimum?: number };
+export type FormColumn = { name: string; label: string; type: 'text' | 'number' | 'date'; required?: boolean; maxLength?: number; minimum?: number };
 
 /**
  * One field of a form. A table has rows of columns, an optional per-row total and an optional grand total.
  * A choice is one of its options; checkboxes are any of them, stored as a list. A section only groups
- * fields under a heading.
+ * fields under a heading. A field with showWhen applies only while another field has that answer.
  */
 export type FormField = {
   name: string;
@@ -24,6 +24,7 @@ export type FormField = {
   columns?: FormColumn[];
   lineTotal?: { label: string; multiply?: string[]; add?: string[] };
   grandTotal?: { label: string };
+  showWhen?: { field: string; equals: string };
 };
 
 export type FormSchema = { description?: string; fields: FormField[] };
@@ -42,6 +43,14 @@ export function readSchema(stored: unknown): FormSchema {
   }
   const schema = stored as FormSchema;
   return { ...schema, fields: schema.fields.filter((field) => typeof field?.name === 'string' && typeof field.label === 'string') };
+}
+
+/**
+ * Whether a field applies to these answers. One that doesn't (a budget amount for another budget type)
+ * is hidden, never required, and an answer left in it from before is ignored.
+ */
+export function isShown(field: FormField, data: FormData): boolean {
+  return !field.showWhen || data[field.showWhen.field] === field.showWhen.equals;
 }
 
 function isEmpty(value: unknown): boolean {
@@ -86,6 +95,7 @@ function valueProblem(field: FormColumn | FormField, value: unknown): string | n
 export function formProblems(schema: FormSchema, data: FormData, requireComplete: boolean): string[] {
   const problems: string[] = [];
   for (const field of schema.fields) {
+    if (!isShown(field, data)) continue;
     const value = data[field.name];
     if (isEmpty(value)) {
       if (requireComplete && field.required) problems.push(`${field.label} is required.`);

@@ -15,6 +15,7 @@ import { bidTotalSuite } from './11-bid-total.ts';
 import { draftAccountSuite } from './12-drafts-accounts-and-forms.ts';
 import { receiptDownloadSuite } from './13-receipts-downloads-and-templates.ts';
 import { businessRegistrationSuite } from './14-business-registration.ts';
+import { tenderAndBidFormChangesSuite } from './15-tender-and-bid-form-changes.ts';
 
 // Migrations without a suite of their own: 040060 (profile columns, exercised by the deactivation
 // and onboarding cases), 040400 (enum values) and 040410 (document tables, exercised by the bid,
@@ -45,4 +46,5 @@ export const fixSuites: FixSuite[] = [
   draftAccountSuite,
   receiptDownloadSuite,
   businessRegistrationSuite,
+  tenderAndBidFormChangesSuite,
 ];

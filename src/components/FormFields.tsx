@@ -2,7 +2,7 @@
 import { Fragment, useState, type ComponentProps } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { classNames } from '../lib/classNames.ts';
-import { displayValue, grandTotal, lineTotal, numberFieldText, readNumber, readSchema, showsLineTotal, tableRows, type FormData, type FormField, type FormRow, type FormSchema } from '../lib/forms.ts';
+import { displayValue, grandTotal, isShown, lineTotal, numberFieldText, readNumber, readSchema, showsLineTotal, tableRows, type FormData, type FormField, type FormRow, type FormSchema } from '../lib/forms.ts';
 import { errorMessage, supabase } from '../lib/supabase.ts';
 import { ErrorNotice, Notice } from './Notices.tsx';
 import { Button } from './ui/button.tsx';
@@ -80,7 +80,7 @@ function TableField({ field, rows, onChange, idPrefix }: { field: FormField; row
                     {column.type === 'number' ? (
                       <NumberInput aria-label={cellLabel} id={cellId} value={row[column.name]} onChange={(value) => setCell(rowIndex, column.name, value)} />
                     ) : (
-                      <Input aria-label={cellLabel} id={cellId} maxLength={column.maxLength} value={row[column.name] ?? ''} onChange={(event) => setCell(rowIndex, column.name, event.target.value)} />
+                      <Input aria-label={cellLabel} id={cellId} type={inputTypes[column.type]} maxLength={column.maxLength} value={row[column.name] ?? ''} onChange={(event) => setCell(rowIndex, column.name, event.target.value)} />
                     )}
                   </TableCell>
                 );
@@ -112,6 +112,7 @@ export function FormFields({ schema, data, onChange, idPrefix = 'form' }: { sche
     <div className="grid min-w-0 gap-4">
       {schema.description && <Notice>{schema.description}</Notice>}
       {schema.fields.map((field, index) => {
+        if (!isShown(field, data)) return null;
         const id = `${idPrefix}-${field.name}`;
         const value = data[field.name];
         const set = (next: FormData[string]) => onChange({ ...data, [field.name]: next });
@@ -172,7 +173,7 @@ export function FormAnswers({ schema, data }: { schema: FormSchema; data: FormDa
   return (
     // Labels stack above answers on phones and wrap at a set width on wider screens; the client's labels run to 100 characters.
     <dl className="my-3 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:gap-y-2 [&>dt]:text-muted-foreground">
-      {schema.fields.map((field) => {
+      {schema.fields.filter((field) => isShown(field, data)).map((field) => {
         const value = data[field.name];
         if (field.type !== 'table') {
           return [<dt key={`${field.name}-label`}>{field.label}</dt>, <dd key={field.name} className="whitespace-pre-line">{displayValue(value) || '—'}</dd>];

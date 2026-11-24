@@ -65,27 +65,48 @@ test('A business posts a tender with the requirements form filled in online and 
   closesAt.setSeconds(0, 0);
 
   await page.getByRole('link', { name: 'Fill in online' }).click();
-  // The client's Tender Creation Form: only the required answers.
+  // The client's Tender Creation Form (version 3, Rockell's 24 Nov 2026 changes): only the required answers.
   await page.getByLabel('Goods', { exact: true }).check();
   for (const [label, answer] of [
     ['Company name', 'rls-test Hotels'],
+    ['Tax Registration Number (TRN)', '123-456-789'],
     ['Contact person', 'rls-test contact'],
+    ['Position/job title', 'Purchasing manager'],
     ['Email address', 'rls-test@example.com'],
     ['Telephone number', '876-555-0100'],
+    ['Company address', '1 Test Road, Kingston'],
     ['Project summary: the goods and/or services required', '40 office chairs'],
     ['Detailed scope of work: deliverables, quantities, standards, locations and special requirements', 'Supply and deliver 40 adjustable chairs'],
     ['Project location(s)', 'Head office'],
+    ['Contract duration', 'One delivery'],
+    ['Expected/Estimated start date', '2026-12-01'],
+    ['Expected/Estimated completion date', '2026-12-15'],
+    ['Supplier question deadline', '2026-11-28'],
+    ['Evaluation start date', '2026-11-30'],
+    ['Evaluation end date', '2026-11-30'],
+    ['Expected award date', '2026-11-30'],
+    ['Contract commencement date', '2026-12-01'],
+    ['Clarification email address: bidders may use this address to request clarification about the tender', 'rls-test-questions@example.com'],
     ['Authorized representative name', 'rls-test representative'],
+    ['Position', 'Manager'],
+    ['Date', '2026-11-16'],
   ] as const) {
     await page.getByLabel(label, { exact: true }).fill(answer);
   }
   await page.getByLabel('Kingston', { exact: true }).check();
   await page.getByLabel('One-Time Project').check();
-  await page.getByLabel('Open Competitive Bidding').check();
+  // Each budget amount appears only for its own budget type.
+  await expect(page.getByLabel('Fixed budget (JMD)', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Budget Range', { exact: true }).check();
+  await expect(page.getByLabel('Estimated budget: minimum (JMD)', { exact: true })).toBeVisible();
+  await page.getByLabel('Fixed Budget', { exact: true }).check();
+  await expect(page.getByLabel('Estimated budget: minimum (JMD)', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Fixed budget (JMD)', { exact: true }).fill('250000');
+  await page.getByRole('group', { name: 'Suppliers must submit' }).getByRole('checkbox').first().check();
+  for (const term of ['Bid Confidentiality', 'Bid Evaluation', 'Contract Award', 'Tender Cancellation', 'Platform Responsibility']) {
+    await page.getByRole('group', { name: term }).getByRole('checkbox').check();
+  }
   await page.getByLabel(/^I certify that I am authorized/).check();
-  // Two fields are called "Position" (buyer contact and representative), as on the client's form.
-  await page.getByLabel('Position', { exact: true }).last().fill('Manager');
-  await page.getByLabel('Date', { exact: true }).fill('2026-11-16');
   await page.getByRole('button', { name: 'Save and attach to the draft' }).click();
   await expect(page.getByText('Filled in online.')).toBeVisible();
   // Opened again straight away, the saved answers are there (the draft page once cached an empty copy under the same key).
@@ -138,7 +159,7 @@ test('A supplier bids with the proposal form filled in online and gets the recei
   await page.goto(`/tenders/${tenderId}/bid`);
   await page.getByLabel('Amount (Jamaican dollars, JMD)').fill('98000');
   await page.getByLabel('Fill in the supplier proposal form online').check();
-  // The client's Bid Submission Form: only the required answers.
+  // The client's Bid Submission Form (version 3): only the required answers.
   for (const [label, answer] of [
     ['Company name', 'e2e-supplier Company'],
     ['TRN', '123-456-789'],
@@ -149,6 +170,8 @@ test('A supplier bids with the proposal form filled in online and gets the recei
     ['Proposal summary: why your company is best suited to deliver', '40 chairs within 14 days'],
     ['How you will carry out the work: key activities, processes, equipment, personnel and quality assurance', 'Deliver from stock'],
     ['Total bid value (JMD)', '98,020.00'],
+    ['Proposed start date', '2026-12-01'],
+    ['Estimated completion date', '2026-12-15'],
     ['Authorized representative name', 'rls-test supplier representative'],
     ['Position', 'Director'],
     ['Date', '2026-11-16'],
@@ -165,6 +188,11 @@ test('A supplier bids with the proposal form filled in online and gets the recei
   await expect(unitPrice).toHaveValue('2,450.50');
   await expect(page.getByLabel('Total bid value (JMD)', { exact: true })).toHaveValue('98,020.00');
   await expect(page.getByRole('cell', { name: '98,020' })).toBeVisible();
+  // The second table is the milestones; a target date is picked from a calendar.
+  await page.getByRole('button', { name: 'Add a row' }).nth(1).click();
+  await page.getByLabel('Milestone, row 1').fill('Delivery');
+  await expect(page.getByLabel('Target date, row 1')).toHaveAttribute('type', 'date');
+  await page.getByLabel('Target date, row 1').fill('2026-12-15');
   await page.getByRole('button', { name: 'Add a row' }).last().click();
   await page.getByLabel('Reference name, row 1').fill('rls-test reference');
   await page.getByLabel('Telephone, row 1').fill('876-555-0102');
