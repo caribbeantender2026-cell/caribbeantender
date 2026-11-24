@@ -55,16 +55,8 @@ const categories = [
   { name: 'Cleaning & Janitorial Services', photo: cleaningPhoto },
 ];
 
-const facts = [
-  { label: 'Bids stay sealed until', value: 'the closing time' },
-  { label: 'Every deadline is shown in', value: 'Jamaica time' },
-  { label: 'Bid receipts are timestamped to', value: 'the second' },
-];
-
 export function HomePage() {
   const { session } = useAccount();
-  const signUpPath = session ? '/tenders' : '/register';
-  const signUpLabel = session ? 'Browse open tenders' : 'Sign up';
 
   return (
     <>
@@ -148,25 +140,6 @@ export function HomePage() {
             <Link to="/about" className="group mt-8 inline-flex items-center gap-1.5 text-lg font-medium text-ink no-underline hover:no-underline">
               About CaribbeanTender
               <ArrowRightIcon className="size-4 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-midnight text-white">
-        <div className={classNames(container, 'pt-24 sm:pt-32')}>
-          <dl className="border-y border-white/15">
-            {facts.map(({ label, value }) => (
-              <div key={label} className="grid gap-2 border-t border-white/15 py-8 first:border-t-0 md:grid-cols-2 md:items-center">
-                <dt className="text-lg text-white/80 sm:text-xl">{label}</dt>
-                <dd className="font-serif text-4xl leading-none tracking-[-0.02em] sm:text-[64px]">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="flex flex-col gap-6 border-b border-white/15 py-20 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="font-serif text-3xl leading-[1.15] font-normal sm:text-[32px]">Ready for Your Next Tender?</h2>
-            <Link to={signUpPath} className="inline-flex self-start rounded-button bg-white px-5 py-3 text-base font-medium text-ink no-underline transition-colors duration-150 hover:bg-white/90 hover:no-underline">
-              {signUpLabel}
             </Link>
           </div>
         </div>

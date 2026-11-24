@@ -14,6 +14,14 @@ function countdown(page: Page) {
   return demo(page).getByText(/^\d+ minutes? \d+ seconds?$/);
 }
 
+test('Nothing sits between the last home page section and the footer', async ({ page }) => {
+  // Rockell, 24 Nov 2026: the blue area at the bottom keeps only the footer's logo and links.
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Ready for Your Next Tender?' })).toHaveCount(0);
+  await expect(page.getByText('Bid receipts are timestamped to')).toHaveCount(0);
+  await expect(page.getByRole('contentinfo').getByRole('link', { name: 'Create an account' })).toBeVisible();
+});
+
 test('The business scenario posts, publishes and awards a tender', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'For Businesses' })).toHaveAttribute('aria-pressed', 'true');
