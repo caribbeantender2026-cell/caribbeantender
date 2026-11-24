@@ -15,7 +15,8 @@ test('A new business is sent to the Business Registration Form and reaches My Te
   await expect(page).toHaveURL(/\/forms\/business-registration\?required=1$/);
 
   // A partly filled form isn't enough.
-  await page.getByLabel('Company name').fill('Registration Test Ltd');
+  // Exact: "Trading name (if different from company name)" contains these words too.
+  await page.getByLabel('Company name', { exact: true }).fill('Registration Test Ltd');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Tax Registration Number (TRN) is required.')).toBeVisible();
   await expect(page).toHaveURL(/\/forms\/business-registration/);
