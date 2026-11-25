@@ -50,7 +50,7 @@ test('The onboarding tour shows once, steps through, and stays finished', async 
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('A business posts a tender with the requirements form filled in online and a document', async ({ browser }) => {
+test('A business posts a tender with the Tender Creation Form filled in online and a document', async ({ browser }) => {
   const page = await signIn(browser, business);
   await page.goto('/business/tenders/new');
   closesAt = new Date(Date.now() + closingDelayMilliseconds);
@@ -63,12 +63,24 @@ test('A business posts a tender with the requirements form filled in online and 
   tenderId = page.url().split('/').at(-2) ?? '';
   // A datetime-local has no seconds, so the real closing time is the start of that minute.
   closesAt.setSeconds(0, 0);
+  // A saved draft says plainly that it isn't live, and Publish waits for the form (Rockell, 24 Nov 2026).
+  const publishButton = page.getByRole('button', { name: 'Publish', exact: true });
+  await expect(page.getByRole('heading', { name: 'Not published yet' })).toBeVisible();
+  await expect(page.getByText(/^Not filled in yet\./)).toBeVisible();
+  await expect(publishButton).toBeDisabled();
 
+  // A half-finished Tender Creation Form saves, and the draft says how much is left.
   await page.getByRole('link', { name: 'Fill in online' }).click();
+  await page.getByLabel('Company name', { exact: true }).fill('rls-test Hotels');
+  await page.getByRole('button', { name: 'Save and attach to the draft' }).click();
+  await expect(page.getByText(/^Started: \d+ answers still to complete\./)).toBeVisible();
+  await expect(publishButton).toBeDisabled();
+
+  await page.getByRole('link', { name: 'Continue the form' }).click();
+  await expect(page.getByLabel('Company name', { exact: true })).toHaveValue('rls-test Hotels');
   // The client's Tender Creation Form (version 3, Rockell's 24 Nov 2026 changes): only the required answers.
   await page.getByLabel('Goods', { exact: true }).check();
   for (const [label, answer] of [
-    ['Company name', 'rls-test Hotels'],
     ['Tax Registration Number (TRN)', '123-456-789'],
     ['Contact person', 'rls-test contact'],
     ['Position/job title', 'Purchasing manager'],
@@ -108,17 +120,18 @@ test('A business posts a tender with the requirements form filled in online and 
   }
   await page.getByLabel(/^I certify that I am authorized/).check();
   await page.getByRole('button', { name: 'Save and attach to the draft' }).click();
-  await expect(page.getByText('Filled in online.')).toBeVisible();
+  await expect(page.getByText(/^Complete\./)).toBeVisible();
   // Opened again straight away, the saved answers are there (the draft page once cached an empty copy under the same key).
-  await page.getByRole('link', { name: 'Edit the online form' }).click();
+  await page.getByRole('link', { name: 'Edit the form' }).click();
   await expect(page.getByLabel('Company name', { exact: true })).toHaveValue('rls-test Hotels');
   await page.getByRole('link', { name: 'Back to your draft' }).click();
   await page.getByLabel('Add supporting documents').setInputFiles({ name: 'rls-test-spec.pdf', mimeType: 'application/pdf', buffer: documentBytes });
   await expect(page.getByText('rls-test-spec.pdf')).toBeVisible();
 
-  await page.goto(`/business/tenders/${tenderId}`);
-  await page.getByRole('button', { name: 'Publish' }).click();
+  // Published straight from the draft, where the checklist ends.
+  await publishButton.click();
   await page.getByRole('dialog').getByRole('button', { name: 'Publish' }).click();
+  await expect(page).toHaveURL(new RegExp(`/business/tenders/${tenderId}$`));
   await expect(page.getByText('Open', { exact: true })).toBeVisible();
   // Opening bids early must fail: nothing about the bids shows before the closing time.
   await expect(page.getByText('Bids are sealed until the closing time')).toBeVisible();

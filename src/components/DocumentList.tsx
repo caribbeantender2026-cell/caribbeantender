@@ -7,7 +7,7 @@ import { errorMessage } from '../lib/supabase.ts';
 import { Notice } from './Notices.tsx';
 
 const roleLabels: Record<Enums<'document_role'>, string> = {
-  requirements_form: 'Requirements form',
+  requirements_form: 'Tender Creation Form',
   proposal: 'Proposal',
   supporting: 'Supporting document',
 };

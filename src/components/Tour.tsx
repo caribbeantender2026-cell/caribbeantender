@@ -54,7 +54,7 @@ type Step = { title: string; text: string; demo?: ReactNode };
 function businessSteps(form: FormData, setForm: (data: FormData) => void): Step[] {
   return [
     { title: 'Post a tender', text: 'Give it a title, a category, a description and a closing time. Save it as a draft until it is ready.', demo: <SampleTender /> },
-    { title: 'Attach the requirements form', text: 'Fill in the requirements form online, or upload your own. Try it here; nothing is saved.', demo: <FormFields schema={demoRequirementsForm} data={form} onChange={setForm} idPrefix="tour-requirements" /> },
+    { title: 'Fill in the Tender Creation Form', text: 'Fill in the Tender Creation Form online, or upload your own. Try it here; nothing is saved.', demo: <FormFields schema={demoRequirementsForm} data={form} onChange={setForm} idPrefix="tour-requirements" /> },
     { title: 'Bids arrive sealed', text: 'Suppliers bid until the closing time. Nobody, not even you, can see a bid, or how many there are, before then.', demo: <div className="mt-4 rounded-xl border p-6"><p>Bids: <strong>sealed until 30 Nov 2026, 5:00 pm</strong></p></div> },
     {
       title: 'Bids open at the closing time',
@@ -76,7 +76,7 @@ function businessSteps(form: FormData, setForm: (data: FormData) => void): Step[
 function supplierSteps(form: FormData, setForm: (data: FormData) => void): Step[] {
   return [
     { title: 'Browse open tenders', text: 'Open tenders are listed soonest-closing first. Filter them by category.', demo: <SampleTender /> },
-    { title: 'Open a tender', text: 'Read the description and the business\'s requirements form, and download its documents.' },
+    { title: 'Open a tender', text: 'Read the description and the business\'s Tender Creation Form, and download its documents.' },
     { title: 'Fill in the proposal form', text: 'Describe what you will deliver and price it. Try it here; nothing is saved.', demo: <FormFields schema={demoProposalForm} data={form} onChange={setForm} idPrefix="tour-proposal" /> },
     { title: 'Submit your sealed bid', text: 'Enter the amount, attach your proposal, and submit before the closing time. A bid can\'t be changed afterwards.' },
     {

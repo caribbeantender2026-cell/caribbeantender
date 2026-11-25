@@ -174,7 +174,8 @@ export function FormFillPage() {
 
   async function save() {
     setOutcome(null);
-    const found = formProblems(definition?.parsedSchema ?? { fields: [] }, current, tenderId !== null || isRequiredRegistration);
+    // A Tender Creation Form can be saved half-finished and completed later; Publish checks it is complete.
+    const found = formProblems(definition?.parsedSchema ?? { fields: [] }, current, isRequiredRegistration);
     setProblems(found);
     if (found.length > 0) return;
     setIsSaving(true);
@@ -221,10 +222,10 @@ export function FormFillPage() {
     <>
       <PageHeader
         title={definition.title}
-        description={tenderId ? 'Fill in the requirements for your draft tender, then save to attach it.' : 'Fill it in and save it to come back later, or download it as a PDF.'}
+        description={tenderId ? 'Fill in the requirements for your draft tender. You can save and come back to it; every required answer is needed before you publish.' : 'Fill it in and save it to come back later, or download it as a PDF.'}
         back={tenderId ? { to: `/business/tenders/${tenderId}/edit`, label: 'Back to your draft' } : { to: '/forms', label: 'All forms' }}
       />
-      {tenderId && <Notice>This becomes the requirements form of your draft tender. It is locked once the tender is published.</Notice>}
+      {tenderId && <Notice>This becomes the Tender Creation Form of your draft tender. It is locked once the tender is published.</Notice>}
       {isRequiredRegistration && <Notice>Complete your Business Registration Form to start posting tenders. You only need to do this once.</Notice>}
       {isLocked && <Notice>This form is attached to {existing?.attached_to_type === 'bid' ? 'a submitted bid' : 'a published tender'} and can't be changed.</Notice>}
       <Card className="max-w-3xl">

@@ -2,20 +2,24 @@
  * Create or edit a draft tender and its files (PRD P1-06). Drafts are fully editable; once published,
  * a tender is managed from its page, where only the closing time can be extended.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2Icon, CircleIcon } from 'lucide-react';
 import { useAccount } from '../../auth/AccountContext.tsx';
 import { CategoryOptions } from '../../components/CategoryOptions.tsx';
+import { useConfirmation } from '../../components/ConfirmDialog.tsx';
+import { useFormDefinition } from '../../components/FormFields.tsx';
 import { ErrorNotice, Loading, Notice } from '../../components/Notices.tsx';
 import { PageHeader } from '../../components/PageHeader.tsx';
 import { Button } from '../../components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader } from '../../components/ui/card.tsx';
 import { Field, Input, NativeSelect, Textarea } from '../../components/ui/fields.tsx';
 import { acceptedDocumentDescription, acceptedDocumentExtensions, checkDocument, draftUploadRule, tenderDocumentPath, uploadProblem } from '../../lib/documents.ts';
+import { formProblems, type FormData } from '../../lib/forms.ts';
 import { useCategories } from '../../lib/queries.ts';
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 import { jamaicaLocalToUtc, utcToJamaicaLocal } from '../../lib/time.ts';
@@ -25,6 +29,7 @@ const minimumTitleLength = 3;
 const maximumTitleLength = 200;
 const maximumDescriptionLength = 20_000;
 const requirementsFolder = 'requirements-form';
+const businessRequirementsFormKey = 'business-requirements';
 
 const tenderSchema = z.object({
   title: z.string().trim().min(minimumTitleLength, `Use at least ${minimumTitleLength} characters.`).max(maximumTitleLength, `Use at most ${maximumTitleLength} characters.`),
@@ -59,23 +64,103 @@ function useDraftFiles(tenderId: string) {
   return useQuery({ queryKey: ['draft-files', tenderId], enabled: tenderId !== '', queryFn: () => listDraftFiles(tenderId) });
 }
 
-/** Whether the draft has its requirements form filled in online, with a link to fill it in or edit it. */
-function OnlineRequirementsForm({ tenderId }: { tenderId: string }) {
+/** The publish confirmation, shared by the draft page and the tender page. */
+export const publishConfirmation = {
+  title: 'Publish this tender?',
+  message: 'Suppliers can see it and bid, and those in its category get an email. After publishing you can only extend the closing time or cancel it.',
+  confirmLabel: 'Publish',
+  cancelLabel: 'Not yet',
+  tone: 'go-ahead',
+} as const;
+
+/**
+ * What is left before a draft can be published, with the Publish button, so a business can't mistake a
+ * saved draft for a live tender (Rockell, 24 Nov 2026: one was saved and never published). The same
+ * rule as publish_tender: an online Tender Creation Form must be complete; otherwise an uploaded one will do.
+ */
+function PublishChecklist({ tenderId }: { tenderId: string }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [confirmation, askToConfirm] = useConfirmation();
+  const [problem, setProblem] = useState<string | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const filesQuery = useDraftFiles(tenderId);
   const attachedQuery = useQuery({
-    // Not the form page's key: that one caches the whole form, this only whether one exists.
+    // Not the form page's key: that one caches the whole form for editing.
     queryKey: ['form-submission', 'attached-to-tender', tenderId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('form_submissions').select('id').eq('attached_to_type', 'tender').eq('attached_to_id', tenderId).maybeSingle();
+      const { data, error } = await supabase.from('form_submissions').select('form_version, data').eq('attached_to_type', 'tender').eq('attached_to_id', tenderId).maybeSingle();
       if (error) throw error;
       return data;
     },
   });
-  const isFilledIn = attachedQuery.data !== null && attachedQuery.data !== undefined;
+  const definitionQuery = useFormDefinition(businessRequirementsFormKey, attachedQuery.data?.form_version);
+
+  const attached = attachedQuery.data;
+  const answersToComplete = attached && definitionQuery.data ? formProblems(definitionQuery.data.parsedSchema, attached.data as FormData, true).length : null;
+  const hasUploadedForm = (filesQuery.data?.requirements.length ?? 0) > 0;
+  const isFormDone = attached ? answersToComplete === 0 : hasUploadedForm;
+  const formStatus = attached
+    ? answersToComplete === 0
+      ? 'Complete.'
+      : `Started: ${answersToComplete ?? '…'} answers still to complete.`
+    : hasUploadedForm
+      ? 'Uploaded.'
+      : 'Not filled in yet. Fill it in online, or upload a completed one under Documents below.';
+
+  async function publish() {
+    const { isConfirmed } = await askToConfirm(publishConfirmation);
+    if (!isConfirmed) return;
+    setProblem(null);
+    setIsPublishing(true);
+    const { error } = await supabase.rpc('publish_tender', { tender_id: tenderId });
+    setIsPublishing(false);
+    if (error) return setProblem(errorMessage(error));
+    await Promise.all([['own-tenders'], ['open-tenders'], ['tender', tenderId]].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+    void navigate(`/business/tenders/${tenderId}`);
+  }
+
+  const step = (isDone: boolean, text: ReactNode) => (
+    <li className="flex gap-3">
+      {isDone ? <CheckCircle2Icon className="mt-0.5 size-5 shrink-0 text-green-700" aria-label="Done" /> : <CircleIcon className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-label="To do" />}
+      <div>{text}</div>
+    </li>
+  );
+
   return (
-    <p>
-      {isFilledIn ? 'Filled in online. ' : 'Fill it in online, or upload the completed form below. '}
-      <Link to={`/forms/business-requirements?tender=${tenderId}`}>{isFilledIn ? 'Edit the online form' : 'Fill in online'}</Link>
-    </p>
+    <Card className="mb-6 max-w-3xl border-2 border-gold">
+      {confirmation}
+      <CardHeader>
+        <h3 className="text-lg font-semibold text-navy-dark">Not published yet</h3>
+        <CardDescription>Suppliers can't see this tender until you publish it.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <ol className="grid gap-3">
+          {step(true, <strong>Tender details saved</strong>)}
+          {step(
+            isFormDone,
+            <>
+              <strong>Tender Creation Form</strong>
+              <p className="text-sm">
+                {formStatus}{' '}
+                <Link to={`/forms/${businessRequirementsFormKey}?tender=${tenderId}`}>{attached ? (isFormDone ? 'Edit the form' : 'Continue the form') : 'Fill in online'}</Link>
+              </p>
+            </>,
+          )}
+          {step(
+            false,
+            <>
+              <strong>Publish</strong>
+              <p className="text-sm text-muted-foreground">{isFormDone ? 'Ready: publish to open the tender for bids.' : 'Available once the Tender Creation Form is complete.'}</p>
+              <Button type="button" variant="gold" className="mt-2" disabled={!isFormDone || isPublishing} onClick={() => void publish()}>
+                {isPublishing ? 'Publishing…' : 'Publish'}
+              </Button>
+            </>,
+          )}
+        </ol>
+        {problem && <Notice tone="error">{problem}</Notice>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -147,10 +232,9 @@ function DraftFiles({ tenderId }: { tenderId: string }) {
         {filesQuery.isPending && <Loading />}
         {filesQuery.isError && <ErrorNotice error={filesQuery.error} />}
         <div className="grid gap-3">
-          <h4 className="font-semibold">Requirements form (required to publish)</h4>
-          <OnlineRequirementsForm tenderId={tenderId} />
+          <h4 className="font-semibold">Tender Creation Form, uploaded (instead of filling it in online)</h4>
           {filesQuery.data && fileRows(filesQuery.data.requirements)}
-          <Field label="Upload the completed requirements form" htmlFor="requirementsUpload">
+          <Field label="Upload a completed Tender Creation Form" htmlFor="requirementsUpload">
             <Input id="requirementsUpload" type="file" accept={acceptedDocumentExtensions} disabled={isBusy} onChange={(event) => void upload(event.target, true)} />
           </Field>
         </div>
@@ -234,11 +318,12 @@ export function TenderFormPage() {
         title={isNew ? 'Post a tender' : 'Edit draft'}
         description={
           isNew
-            ? 'First describe what you need and when bids close. Next you add the requirements form and any documents, then publish it. Nothing is public until you publish.'
-            : 'Your draft is only visible to you. Change the details, add the requirements form and documents below, then publish it from the tender page.'
+            ? 'First describe what you need and when bids close. Next you fill in the Tender Creation Form and add any documents, then publish it. Nothing is public until you publish.'
+            : 'Your draft is only visible to you. Finish the steps below, then publish it.'
         }
         back={isNew ? { to: '/business', label: 'My tenders' } : { to: `/business/tenders/${tenderId}`, label: 'Back to the tender' }}
       />
+      {!isNew && <PublishChecklist tenderId={tenderId} />}
       <Card className="mb-6 max-w-3xl">
         <CardContent>
           <form className="grid gap-4" onSubmit={form.handleSubmit(save)} noValidate>

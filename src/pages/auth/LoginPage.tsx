@@ -19,6 +19,16 @@ const loginSchema = z.object({
 });
 type LoginValues = z.infer<typeof loginSchema>;
 
+/**
+ * Where a business lands after logging in: back on its newest unpublished draft, so it picks up where it
+ * left off and publishes it (a business once saved a draft, left, and never came back to it). My tenders
+ * otherwise, or if the drafts can't be read.
+ */
+async function businessLandingPath(businessId: string): Promise<string> {
+  const { data, error } = await supabase.from('tenders').select('id').eq('business_id', businessId).eq('status', 'draft').order('updated_at', { ascending: false }).limit(1).maybeSingle();
+  return error || !data ? '/business' : `/business/tenders/${data.id}/edit`;
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParameters] = useSearchParams();
@@ -64,7 +74,7 @@ export function LoginPage() {
       } else if (accounts.businessProfile && accounts.supplierProfile) {
         void navigate('/login?choose=account', { replace: true });
       } else {
-        void navigate(accounts.businessProfile ? '/business' : '/supplier');
+        void navigate(accounts.businessProfile ? await businessLandingPath(data.user.id) : '/supplier');
       }
     } catch (accountsError) {
       setProblem(`You are logged in, but your accounts could not be loaded: ${errorMessage(accountsError)}`);
@@ -91,7 +101,7 @@ export function LoginPage() {
           <p>This email has both a Business account and a Supplier account. Choose which one you want to use.</p>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2 px-8">
-          <Button asChild><Link to="/business">Business Account</Link></Button>
+          <Button type="button" onClick={async () => void navigate(await businessLandingPath(businessProfile.user_id))}>Business Account</Button>
           <Button asChild variant="gold"><Link to="/supplier">Supplier Account</Link></Button>
         </CardContent>
       </Card>

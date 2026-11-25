@@ -24,13 +24,14 @@ import { tenderPhase, tenderPhaseDisplay, type TenderPhase } from '../../lib/rul
 import { errorMessage, supabase } from '../../lib/supabase.ts';
 import { formatJamaicaDateTime, jamaicaLocalToUtc, utcToJamaicaLocal } from '../../lib/time.ts';
 import { tenderServerTime, useTender } from '../TenderDetailsPage.tsx';
+import { publishConfirmation } from './TenderFormPage.tsx';
 
 const maximumReasonLength = 1000;
 const sectionHeadingClasses = 'mt-6 mb-3 text-base font-semibold text-navy-dark';
 
 // What the business can do next, in plain words, for each phase of its tender.
 const phaseGuidance: Record<TenderPhase, string> = {
-  draft: 'A draft: only you can see it. Edit it and attach the requirements form, then publish it to open it for bids.',
+  draft: 'Not published yet: only you can see it. Fill in the Tender Creation Form, then publish it to open it for bids.',
   'accepting-bids': 'Open for bids until the closing time. Bids stay sealed until then; you can only extend the closing time or cancel.',
   'awaiting-opening': 'The closing time has passed. The bids open within a minute.',
   opened: 'Closed. Every bid is below. Award the one you choose; the others are marked unsuccessful.',
@@ -227,7 +228,7 @@ export function TenderManagePage() {
               formKey={tenderQuery.data.requirementsForm.form_key}
               formVersion={tenderQuery.data.requirementsForm.form_version}
               data={tenderQuery.data.requirementsForm.data as FormData}
-              notes={[`Requirements form for the tender "${tender.title}"`]}
+              notes={[`Tender Creation Form for the tender "${tender.title}"`]}
             />
           )}
           {problem && <Notice tone="error">{problem}</Notice>}
@@ -242,13 +243,7 @@ export function TenderManagePage() {
                 variant="gold"
                 disabled={isBusy}
                 onClick={async () => {
-                  const { isConfirmed } = await askToConfirm({
-                    title: 'Publish this tender?',
-                    message: 'Suppliers can see it and bid, and those in its category get an email. After publishing you can only extend the closing time or cancel it.',
-                    confirmLabel: 'Publish',
-                    cancelLabel: 'Not yet',
-                    tone: 'go-ahead',
-                  });
+                  const { isConfirmed } = await askToConfirm(publishConfirmation);
                   if (isConfirmed) void act(() => supabase.rpc('publish_tender', { tender_id: tender.id }));
                 }}
               >

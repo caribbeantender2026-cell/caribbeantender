@@ -117,7 +117,7 @@ const businessScenes: Scene[] = [
     screen: 'business-tender',
     businessPhase: 'draft',
     caption: 'The business publishes it',
-    instruction: 'Attach the requirements form and any documents, then select Publish. Suppliers in that category get an email.',
+    instruction: 'Fill in the Tender Creation Form, add any documents, then select Publish. Suppliers in that category get an email.',
     moves: [
       { milliseconds: 1000, pointerAt: 'publish' },
       { milliseconds: 400, pointerAt: 'publish', isClick: true },

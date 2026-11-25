@@ -86,7 +86,7 @@ export function TenderDetailsPage() {
               formKey={requirementsForm.form_key}
               formVersion={requirementsForm.form_version}
               data={requirementsForm.data as FormData}
-              notes={[`Requirements form for the tender "${tender.title}"`]}
+              notes={[`Tender Creation Form for the tender "${tender.title}"`]}
             />
           )
         }
